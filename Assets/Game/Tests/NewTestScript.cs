@@ -2,12 +2,10 @@ using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using TreeEditor;
 using UnityEngine;
 
 public class NewTestScript
 {
-    // A Test behaves as an ordinary method
     [Test]
     public void EventTest()
     {
@@ -15,7 +13,6 @@ public class NewTestScript
         Debug.Log("Event id: " + @event.Id);
         Debug.Log("Event source id: " + @event.SystemSourceId);
 
-        // Создаем спецификацию таргетинга для MassDamageEvent
         var targetingSpec = new BasicTargetingSpec
         {
             Description = "Single target damage",
@@ -30,10 +27,10 @@ public class NewTestScript
         MassDamageEvent damageEvent = new(Geid.New, Geid.New, Geid.New, 10, targetingSpec);
         Debug.Log("DamageEvent id: " + damageEvent.Id);
 
-        var target = damageEvent.SubjectsList?.SingleOrDefault(t => t.Role == SubjectRole.Target)?.Entity;
-        var source = damageEvent.SubjectsList?.SingleOrDefault(t => t.Role == SubjectRole.Source)?.Entity;
-        Debug.Log("Damage target id: " + (target.Equals(default(Geid)) ? "none" : target.ToString()));
-        Debug.Log("Damage source id: " + (source.Equals(default(Geid)) ? "none" : source.ToString()));
+        var target = damageEvent.GetFirstSubject(SubjectRole.Target);
+        var source = damageEvent.GetFirstSubject(SubjectRole.Source);
+        Debug.Log("Damage target id: " + (target == Geid.Empty ? "none" : target.ToString()));
+        Debug.Log("Damage source id: " + (source == Geid.Empty ? "none" : source.ToString()));
 
         Debug.Log("Damage sys source id: " + damageEvent.SystemSourceId);
         Debug.Log("Damage amount: " + damageEvent.DamageAmount);
@@ -43,14 +40,11 @@ public class NewTestScript
     [Test]
     public void EventEngineTest()
     {
-        // Setup
         DamageSystem damageSystem = new();
         HealthSystem healthSystem = new();
         TargetingSystem targetingSystem = new();
         BattleState battleState = new BattleState(12);
 
-
-        // Create entities
         var sourceEntity = new BaseEntity();
         Debug.Log("Source entity id: " + sourceEntity.Id);
         battleState.AddEntity(sourceEntity);
@@ -58,17 +52,14 @@ public class NewTestScript
         Debug.Log("Target entity id: " + targetEntity.Id);
         battleState.AddEntity(targetEntity);
 
-        // Add HealthComponent to entities
         var sourceHealth = new HealthComponent(100);
         sourceEntity.AddComponent(sourceHealth);
         var targetHealth = new HealthComponent(100);
         targetEntity.AddComponent(targetHealth);
 
-        //Add PowerComponent to source entity
         var sourcePower = new PowerComponent(50);
         sourceEntity.AddComponent(sourcePower);
 
-        // Создаем спецификации таргетинга
         var singleTargetSpec = new BasicTargetingSpec
         {
             Description = "Single target",
@@ -81,18 +72,15 @@ public class NewTestScript
             SourceEntity = sourceEntity.Id
         };
 
-        // Create events (first arg = systemSourceId)
         SingleDamageEvent damageEvent = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 80);
         SingleDamageEvent damageEvent1 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 30);
         SingleDamageEvent damageEvent2 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 20);
 
-        // Create dispatcher 
-        EventDispatcher dispatcher = new(battleState);
+        EventQueue dispatcher = new(battleState);
         dispatcher.Subscribe(targetingSystem);
         dispatcher.Subscribe(damageSystem);
         dispatcher.Subscribe(healthSystem);
 
-        // Enqueue and process event
         dispatcher.Enqueue(damageEvent);
         dispatcher.Enqueue(damageEvent1);
         dispatcher.EnqueueWithBarrier(damageEvent2);
@@ -110,7 +98,6 @@ public class NewTestScript
         TargetingSystem targetingSystem = new();
         BattleState battleState = new BattleState(12);
 
-        // Create entities
         var sourceEntity = new BaseEntity();
         Debug.Log("Source entity id: " + sourceEntity.Id);
         battleState.AddEntity(sourceEntity);
@@ -118,27 +105,20 @@ public class NewTestScript
         Debug.Log("Target entity id: " + targetEntity.Id);
         battleState.AddEntity(targetEntity);
 
-
-        // Add HealthComponent to entities
         var sourceHealth = new HealthComponent(100);
         sourceEntity.AddComponent(sourceHealth);
         var targetHealth = new HealthComponent(100);
         targetEntity.AddComponent(targetHealth);
 
-
-        //Add PowerComponent to source entity
         var sourcePower = new PowerComponent(50);
         sourceEntity.AddComponent(sourcePower);
 
-        //Add ShieldComponent to target entity
         var targetShield = new ShieldComponent(50);
         targetEntity.AddComponent(targetShield);
 
-        //Add VampComponent to source entity
         var sourceVamp = new VampComponent(0.5f);
         sourceEntity.AddComponent(sourceVamp);
 
-        // Спецификация таргетинга для массового урона
         var massTargetSpec = new BasicTargetingSpec
         {
             Description = "Mass damage - single target",
@@ -151,20 +131,17 @@ public class NewTestScript
             SourceEntity = sourceEntity.Id
         };
 
-        // Create events (first arg = systemSourceId)
         MassDamageEvent damageEvent = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 80, massTargetSpec);
         MassDamageEvent damageEvent1 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 30, massTargetSpec);
         MassDamageEvent damageEvent2 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 20, massTargetSpec);
 
-        // Create dispatcher
-        EventDispatcher dispatcher = new(battleState);
+        EventQueue dispatcher = new(battleState);
         dispatcher.Subscribe(targetingSystem);
         dispatcher.Subscribe(damageSystem);
         dispatcher.Subscribe(shieldSystem);
         dispatcher.Subscribe(healthSystem);
         dispatcher.Subscribe(vampSystem);
 
-        // Enqueue and process event
         dispatcher.Enqueue(damageEvent);
         dispatcher.Enqueue(damageEvent1);
         dispatcher.EnqueueWithBarrier(damageEvent2);
@@ -175,7 +152,6 @@ public class NewTestScript
     [Test]
     public void CardGraphTest()
     {
-        // Setup
         DamageSystem damageSystem = new();
         HealthSystem healthSystem = new();
         VampSystem vampSystem = new();
@@ -184,8 +160,7 @@ public class NewTestScript
         TargetingSystem targetingSystem = new();
         BattleState battleState = new BattleState(12);
 
-        // Create dispatcher
-        EventDispatcher dispatcher = new(battleState);
+        EventQueue dispatcher = new(battleState);
         dispatcher.Subscribe(targetingSystem);
         dispatcher.Subscribe(damageSystem);
         dispatcher.Subscribe(shieldSystem);
@@ -193,7 +168,6 @@ public class NewTestScript
         dispatcher.Subscribe(vampSystem);
         dispatcher.Subscribe(cardGraphSystem);
 
-        // Create entities
         var sourceEntity = new BaseEntity();
         Debug.Log("Source entity id: " + sourceEntity.Id);
         battleState.AddEntity(sourceEntity);
@@ -201,21 +175,18 @@ public class NewTestScript
         Debug.Log("Target entity id: " + targetEntity.Id);
         battleState.AddEntity(targetEntity);
 
-
-        // Add HealthComponent to entities
         var sourceHealth = new HealthComponent(100);
         sourceEntity.AddComponent(sourceHealth);
         var targetHealth = new HealthComponent(100);
         targetEntity.AddComponent(targetHealth);
         var sourceMana = new ManaComponent(100);
         sourceEntity.AddComponent(sourceMana);
-        // Add HexComponent to entities
+
         var sourceHex = new HexComponent(new HexCoordinates(0, 0));
         sourceEntity.AddComponent(sourceHex);
         var targetHex = new HexComponent(new HexCoordinates(1, 0));
         targetEntity.AddComponent(targetHex);
 
-        // Спецификации таргетинга
         var damageTargetSpec = new BasicTargetingSpec
         {
             Description = "Damage target",
@@ -252,24 +223,23 @@ public class NewTestScript
             SourceEntity = sourceEntity.Id
         };
 
-        // Create events (first arg = systemSourceId)
         MassDamageEvent damageEvent = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 18, damageTargetSpec);
         MassDamageEvent damageEvent1 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 30, damageTargetSpec);
         MassDamageEvent damageEvent2 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 20, damageTargetSpec);
 
-        var node1 = new CardGraphNode(new List<IGameEvent> { damageEvent }); //deals 18 damage
-        var node2 = new CardGraphNode(new List<IGameEvent> { new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 50, healTargetSpec), damageEvent1, damageEvent2 });  //heals 50, takes 30 damage, takes 20 damage
-        var node3 = new CardGraphNode(new List<IGameEvent> { new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, sourceEntity.Id, 30, selfHealSpec) }); //heals 30
-        var node4 = new CardGraphNode(new List<IGameEvent> { new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, sourceEntity.Id, 20, selfHealSpec) }); //heals 20
+        var node1 = new CardGraphNode(new List<IGameEvent> { damageEvent });
+        var node2 = new CardGraphNode(new List<IGameEvent> { new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 50, healTargetSpec), damageEvent1, damageEvent2 });
+        var node3 = new CardGraphNode(new List<IGameEvent> { new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, sourceEntity.Id, 30, selfHealSpec) });
+        var node4 = new CardGraphNode(new List<IGameEvent> { new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, sourceEntity.Id, 20, selfHealSpec) });
 
         var predicate = new ManaLevelPredicate(ComparisonOperator.GreaterThanOrEqual, 30, sourceEntity.Id);
         var predicate2 = new HealthLevelPredicate(ComparisonOperator.LessThan, 900, sourceEntity.Id);
 
         node1.TieNode(node2, predicate);
         node1.TieNode(node3, predicate2);
-        node3.TieNode(node1, predicate2); //loop back to node1
-        node3.TieNode(node4, predicate2); //unconditional tie to node4
-        // Enqueue and process event
+        node3.TieNode(node1, predicate2);
+        node3.TieNode(node4, predicate2);
+
         var playCardEvent = new ExecuteCardGraphEvent(sourceEntity.Id, node1);
         dispatcher.Enqueue(playCardEvent);
         dispatcher.ProcessQueue();
@@ -280,7 +250,6 @@ public class NewTestScript
     [Test]
     public void RandomAndCoordinatesTest()
     {
-        // Setup
         DamageSystem damageSystem = new();
         HealthSystem healthSystem = new();
         VampSystem vampSystem = new();
@@ -294,8 +263,7 @@ public class NewTestScript
         BattleState battleState = new BattleState(seed);
         Debug.Log("Battle RNG seed: " + seed);
 
-        // Create dispatcher
-        EventDispatcher dispatcher = new(battleState);
+        EventQueue dispatcher = new(battleState);
         dispatcher.Subscribe(targetingSystem);
         dispatcher.Subscribe(damageSystem);
         dispatcher.Subscribe(shieldSystem);
@@ -305,7 +273,7 @@ public class NewTestScript
         dispatcher.Subscribe(moveSystem);
         dispatcher.Subscribe(randomMovementSystem);
         dispatcher.Subscribe(randomDamageSystem);
-        // Create entities
+
         var sourceEntity = new BaseEntity();
         Debug.Log("Source entity id: " + sourceEntity.Id);
         battleState.AddEntity(sourceEntity);
@@ -313,8 +281,6 @@ public class NewTestScript
         Debug.Log("Target entity id: " + targetEntity.Id);
         battleState.AddEntity(targetEntity);
 
-
-        // Add HealthComponent to entities
         var sourceHealth = new HealthComponent(100);
         sourceEntity.AddComponent(sourceHealth);
         var targetHealth = new HealthComponent(100);
@@ -322,18 +288,15 @@ public class NewTestScript
         var sourceMana = new ManaComponent(100);
         sourceEntity.AddComponent(sourceMana);
 
-        // Add HexComponent to entities
         var sourceHex = new HexComponent(new HexCoordinates(0, 0));
         sourceEntity.AddComponent(sourceHex);
         var targetHex = new HexComponent(new HexCoordinates(1, 0));
         targetEntity.AddComponent(targetHex);
-        // Create MoveEntityEvent
+
         RandomMovementEvent randomMovementEvent = new(sourceEntity.Id, sourceEntity.Id, 2);
         RandomMovementEvent randomMovementEvent1 = new(targetEntity.Id, targetEntity.Id, 2);
-        // RandomDamageEvent: first arg = systemSourceId
         RandomDamageEvent randomDamageEvent = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 1, 200);
 
-        // Enqueue and process event
         dispatcher.Enqueue(randomDamageEvent);
         dispatcher.Enqueue(randomMovementEvent);
         dispatcher.Enqueue(randomMovementEvent1);
@@ -348,12 +311,10 @@ public class NewTestScript
     [Test]
     public void TargetingTest()
     {
-        // Инициализируем фиксированный сид
         int seed = 12345;
         BattleState battleState = new BattleState(seed);
         TargetingSystem targetingSystem = new();
 
-        // Создаём сущности и их здоровье
         var source = new BaseEntity();
         battleState.AddEntity(source);
 
@@ -362,14 +323,11 @@ public class NewTestScript
         battleState.AddEntity(lowHp);
         battleState.AddEntity(highHp);
 
-        // Добавляем HealthComponent (MetricComponent) с разными значениями
-        lowHp.AddComponent(new HealthComponent(10));   // Низкое здоровье
-        highHp.AddComponent(new HealthComponent(50));  // Высокое здоровье
+        lowHp.AddComponent(new HealthComponent(10));
+        highHp.AddComponent(new HealthComponent(50));
 
-        // Создаем фильтр для таргетинга: только сущности с Health <= 20
         var healthFilter = new HealthThresholdFilter(20);
 
-        // Создаем спецификацию таргетинга
         var targetingSpec = new BasicTargetingSpec
         {
             Description = "Target low health entities",
@@ -382,18 +340,15 @@ public class NewTestScript
             SourceEntity = source.Id
         };
 
-        // Создаем событие с таргетингом
         var damageEvent = new MassDamageEvent(source.Id, source.Id, Geid.Empty, 10, targetingSpec);
 
-        // Создаем диспетчер и обрабатываем событие
-        EventDispatcher dispatcher = new(battleState);
+        EventQueue dispatcher = new(battleState);
         dispatcher.Subscribe(targetingSystem);
 
         dispatcher.Enqueue(damageEvent);
         dispatcher.ProcessQueue();
 
-        // Проверяем результаты
-        var targets = damageEvent.SubjectsList?.Where(s => s.Role == SubjectRole.Target).Select(s => s.Entity).ToList();
+        var targets = damageEvent.GetSubjects(SubjectRole.Target).ToList();
 
         Assert.IsNotNull(targets, "Targets should not be null");
         Assert.AreEqual(1, targets.Count, "Expected one target with low health");
@@ -401,6 +356,194 @@ public class NewTestScript
         Assert.IsFalse(targets.Contains(highHp.Id), "Expected targets NOT to contain highHp.Id");
 
         Debug.Log("TargetingPredicateTest passed.");
+    }
+
+    // ===== NEW TESTS FOR EventQueue FEATURES =====
+
+    [Test]
+    public void StateHistoryTest()
+    {
+        // Проверяем что снимки состояния создаются перед обработкой внешних событий
+        BattleState battleState = new BattleState(42);
+        var entity = new BaseEntity();
+        entity.AddComponent(new HealthComponent(100));
+        battleState.AddEntity(entity);
+
+        EventQueue queue = new(battleState);
+        HealthSystem healthSystem = new();
+        DamageSystem damageSystem = new();
+        queue.Subscribe(damageSystem);
+        queue.Subscribe(healthSystem);
+
+        var dmg1 = new SingleDamageEvent(entity.Id, entity.Id, entity.Id, 10);
+        var dmg2 = new SingleDamageEvent(entity.Id, entity.Id, entity.Id, 15);
+
+        // Каждое внешнее событие должно создавать снимок
+        queue.Enqueue(dmg1);
+        queue.Enqueue(dmg2);
+        queue.ProcessQueue();
+
+        Assert.AreEqual(2, queue.StateHistory.Count, "Expected 2 state snapshots (one per external event)");
+        Assert.IsTrue(queue.StateHistory[0].Timestamp <= queue.StateHistory[1].Timestamp,
+            "Snapshots should be ordered by time");
+        Debug.Log($"StateHistoryTest passed. Snapshots: {queue.StateHistory.Count}");
+    }
+
+    [Test]
+    public void BarrierWithPredicateTest()
+    {
+        // Проверяем что барьерная очередь с предикатом работает корректно
+        BattleState battleState = new BattleState(42);
+        var entity = new BaseEntity();
+        var health = new HealthComponent(100);
+        entity.AddComponent(health);
+        battleState.AddEntity(entity);
+
+        EventQueue queue = new(battleState);
+        HealthSystem healthSystem = new();
+        DamageSystem damageSystem = new();
+        queue.Subscribe(damageSystem);
+        queue.Subscribe(healthSystem);
+
+        // Событие в барьерной очереди с предикатом: здоровье < 80 (изначально не выполнен)
+        var barrierDmg = new SingleDamageEvent(entity.Id, entity.Id, entity.Id, 5);
+        var predicate = new HealthLevelPredicate(ComparisonOperator.LessThan, 80, entity.Id);
+
+        queue.EnqueueWithBarrier(barrierDmg, predicate);
+
+        // Первое событие: наносит 30 урона (здоровье = 70 < 80 → предикат выполнится)
+        var mainDmg = new SingleDamageEvent(entity.Id, entity.Id, entity.Id, 30);
+        queue.Enqueue(mainDmg);
+        queue.ProcessQueue();
+
+        // После обработки: здоровье должно быть 70 - 5 = 65 (предикат выполнился, barrier-событие тоже обработано)
+        Assert.AreEqual(65, health.CurrentHealth,
+            "Expected health=65 after barrier event released when health < 80");
+        Debug.Log($"BarrierWithPredicateTest passed. Health: {health.CurrentHealth}");
+    }
+
+    [Test]
+    public void BarrierPredicateNotMetTest()
+    {
+        // Проверяем что барьерное событие НЕ обрабатывается если предикат не выполнен
+        BattleState battleState = new BattleState(42);
+        var entity = new BaseEntity();
+        var health = new HealthComponent(100);
+        entity.AddComponent(health);
+        battleState.AddEntity(entity);
+
+        EventQueue queue = new(battleState);
+        HealthSystem healthSystem = new();
+        DamageSystem damageSystem = new();
+        queue.Subscribe(damageSystem);
+        queue.Subscribe(healthSystem);
+
+        // Барьерное событие: только если здоровье < 10 (никогда не выполнится при 100 hp)
+        var barrierDmg = new SingleDamageEvent(entity.Id, entity.Id, entity.Id, 5);
+        var predicate = new HealthLevelPredicate(ComparisonOperator.LessThan, 10, entity.Id);
+
+        queue.EnqueueWithBarrier(barrierDmg, predicate);
+
+        // Основное событие: 20 урона
+        var mainDmg = new SingleDamageEvent(entity.Id, entity.Id, entity.Id, 20);
+        queue.Enqueue(mainDmg);
+        queue.ProcessQueue();
+
+        // Здоровье должно быть 80 (только mainDmg обработан, barrierDmg заблокирован)
+        Assert.AreEqual(80, health.CurrentHealth,
+            "Expected health=80 since barrier predicate was never satisfied");
+        Debug.Log($"BarrierPredicateNotMetTest passed. Health: {health.CurrentHealth}");
+    }
+
+    [Test]
+    public void SubjectsStructureTest()
+    {
+        // Проверяем новую структуру Subjects
+        var sourceId = Geid.New;
+        var targetId = Geid.New;
+
+        var evt = new SingleDamageEvent(sourceId, sourceId, targetId, 50);
+
+        // Проверяем что роли правильно инициализированы
+        Assert.AreEqual(sourceId, evt.GetFirstSubject(SubjectRole.Source),
+            "Source should match");
+        Assert.AreEqual(targetId, evt.GetFirstSubject(SubjectRole.Target),
+            "Target should match");
+        Assert.AreEqual(0, evt.GetSubjects(SubjectRole.Owner).Count,
+            "Owner list should be empty");
+
+        // Проверяем что список сортирован по индексам SubjectRole
+        Assert.AreEqual((int)SubjectRole.Source, 0);
+        Assert.AreEqual((int)SubjectRole.Target, 1);
+
+        var sources = evt.GetSubjects(SubjectRole.Source);
+        Assert.AreEqual(1, sources.Count, "Should have exactly 1 source");
+        Assert.AreEqual(sourceId, sources[0]);
+
+        Debug.Log("SubjectsStructureTest passed.");
+    }
+
+    [Test]
+    public void PhaseLogSystemsTest()
+    {
+        // Проверяем что системы логирования подписываются и не вызывают ошибок
+        BattleState battleState = new BattleState(42);
+        var entity = new BaseEntity();
+        entity.AddComponent(new HealthComponent(100));
+        battleState.AddEntity(entity);
+
+        EventQueue queue = new(battleState);
+        queue.Subscribe(new PhaseStartLogSystem());
+        queue.Subscribe(new PhaseEndLogSystem());
+        queue.Subscribe(new DamageSystem());
+        queue.Subscribe(new HealthSystem());
+
+        var dmg = new SingleDamageEvent(entity.Id, entity.Id, entity.Id, 10);
+        queue.Enqueue(dmg);
+
+        // Должно выполниться без исключений
+        Assert.DoesNotThrow(() => queue.ProcessQueue(), "PhaseLog systems should not throw");
+        Debug.Log("PhaseLogSystemsTest passed.");
+    }
+
+    [Test]
+    public void StateSnapshotContentsTest()
+    {
+        // Проверяем что снимок корректно содержит данные сущности
+        BattleState battleState = new BattleState(42);
+        var entity = new BaseEntity();
+        var health = new HealthComponent(100);
+        entity.AddComponent(health);
+        battleState.AddEntity(entity);
+
+        EventQueue queue = new(battleState);
+        queue.Subscribe(new DamageSystem());
+        queue.Subscribe(new HealthSystem());
+
+        // Перед обработкой: здоровье = 100
+        var dmg = new SingleDamageEvent(entity.Id, entity.Id, entity.Id, 30);
+        queue.Enqueue(dmg);
+        queue.ProcessQueue();
+
+        // Снимок должен был содержать здоровье = 100 (до обработки)
+        Assert.AreEqual(1, queue.StateHistory.Count, "Expected 1 snapshot");
+        var snapshot = queue.StateHistory[0];
+        Assert.IsTrue(snapshot.EntitySnapshots.ContainsKey(entity.Id),
+            "Snapshot should contain the entity");
+
+        var entitySnap = snapshot.EntitySnapshots[entity.Id];
+        Assert.IsTrue(entitySnap.ContainsKey(typeof(HealthComponent)),
+            "Entity snapshot should contain HealthComponent");
+
+        var healthSnap = entitySnap[typeof(HealthComponent)] as HealthComponent;
+        Assert.IsNotNull(healthSnap, "HealthComponent clone should not be null");
+        Assert.AreEqual(100, healthSnap.CurrentHealth,
+            "Snapshot health should be 100 (before damage was applied)");
+
+        // После обработки: реальное здоровье = 70
+        Assert.AreEqual(70, health.CurrentHealth, "Live health should be 70 after 30 damage");
+
+        Debug.Log($"StateSnapshotContentsTest passed. Snapshot HP: {healthSnap.CurrentHealth}, Live HP: {health.CurrentHealth}");
     }
 }
 

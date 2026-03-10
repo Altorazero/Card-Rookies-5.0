@@ -5,21 +5,20 @@ public class RandomDamageEvent : IGameEvent, IHaveSubjects
     public EventStatus Status { get; set; } = EventStatus.Pending;
     public Geid Id { get; }
     public Geid SystemSourceId { get; }
-    public List<Subject> SubjectsList { get; set; }
+    public List<List<Geid>> Subjects { get; set; }
 
-    public int LowerBond { get; }
-    public int UpperBond { get; }
-    public RandomDamageEvent(Geid systemSourceId, Geid sourceId, Geid targetId, int lowreBond, int upperBond)
+    public int LowerBound { get; }
+    public int UpperBound { get; }
+
+    public RandomDamageEvent(Geid systemSourceId, Geid sourceId, Geid targetId, int lowerBound, int upperBound)
     {
         Id = Geid.New;
         SystemSourceId = systemSourceId;
-        LowerBond = lowreBond;
-        UpperBond = upperBond;
-        SubjectsList = new List<Subject>
-        {
-            new Subject { Entity = sourceId, Role = SubjectRole.Source },
-            new Subject { Entity = targetId, Role = SubjectRole.Target }
-        };
+        LowerBound = lowerBound;
+        UpperBound = upperBound;
+        Subjects = SubjectsHelper.Create(
+            (SubjectRole.Source, sourceId),
+            (SubjectRole.Target, targetId)
+        );
     }
-
 }

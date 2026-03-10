@@ -1,15 +1,22 @@
+using System;
+
 public class EventContext
 {
     public BattleState BattleState { get; }
     public IGameEvent Event { get; }
-    public EventDispatcher Dispatcher { get; }
-    
+    public EventQueue Dispatcher { get; }
+
     /// <summary>
-    /// Текущий кандидат при оценке таргетинга. Null вне контекста таргетинга.
+    /// РўРµРєСѓС‰Р°СЏ С„Р°Р·Р°, РѕР±СЂР°Р±Р°С‚С‹РІР°РµРјР°СЏ EventQueue. Null РІРЅРµ РѕР±СЂР°Р±РѕС‚РєРё С„Р°Р·.
+    /// </summary>
+    public Type CurrentPhase { get; internal set; }
+
+    /// <summary>
+    /// РўРµРєСѓС‰РёР№ РєР°РЅРґРёРґР°С‚ РїСЂРё С‚Р°СЂРіРµС‚РёРЅРіРµ. Null РїСЂРё РѕР±С‹С‡РЅРѕР№ РѕР±СЂР°Р±РѕС‚РєРµ.
     /// </summary>
     public Geid? EvaluatingCandidate { get; internal set; }
 
-    public EventContext(BattleState battleState, IGameEvent @event, EventDispatcher dispatcher)
+    public EventContext(BattleState battleState, IGameEvent @event, EventQueue dispatcher)
     {
         BattleState = battleState;
         Event = @event;

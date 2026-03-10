@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 
 /// <summary>
-/// Событие исцеления с поддержкой системы таргетинга
+/// РЎРѕР±С‹С‚РёРµ Р»РµС‡РµРЅРёСЏ СЃ РґРёРЅР°РјРёС‡РµСЃРєРёРј РІС‹Р±РѕСЂРѕРј С†РµР»Рё.
 /// </summary>
 public class HealEventWithTargeting : IGameEvent, IHaveSubjects, IGuardPhaseEvent, IModifyPhaseEvent, IApplyPhaseEvent, IAfterPhaseEvent, ITargetResolvePhaseEvent, INeedTargeting
 {
@@ -9,7 +9,7 @@ public class HealEventWithTargeting : IGameEvent, IHaveSubjects, IGuardPhaseEven
     public EventStatus Status { get; set; } = EventStatus.Pending;
     public Geid Id { get; }
     public Geid SystemSourceId { get; }
-    public List<Subject> SubjectsList { get; set; }
+    public List<List<Geid>> Subjects { get; set; }
     public ITargetingSpec TargetingSpec { get; set; }
 
     public HealEventWithTargeting(Geid systemSourceId, Geid sourceId, Geid targetId, int healAmount, ITargetingSpec targetingSpec)
@@ -18,17 +18,12 @@ public class HealEventWithTargeting : IGameEvent, IHaveSubjects, IGuardPhaseEven
         SystemSourceId = systemSourceId;
         HealAmount = healAmount;
         TargetingSpec = targetingSpec;
-        
-        SubjectsList = new List<Subject>
-        {
-            new Subject { Entity = sourceId, Role = SubjectRole.Source }
-        };
-        
-        // Если targetId не пустой, добавляем его как начальную цель
-        // (будет перезаписан системой таргетинга)
+
+        Subjects = SubjectsHelper.Empty();
+        Subjects[(int)SubjectRole.Source].Add(sourceId);
+
+        // Р•СЃР»Рё targetId РЅРµ РїСѓСЃС‚РѕР№ вЂ” РґРѕР±Р°РІР»СЏРµРј РєР°Рє РїСЂРµРґСѓСЃС‚Р°РЅРѕРІР»РµРЅРЅСѓСЋ С†РµР»СЊ
         if (!targetId.Equals(Geid.Empty))
-        {
-            SubjectsList.Add(new Subject { Entity = targetId, Role = SubjectRole.Target });
-        }
+            Subjects[(int)SubjectRole.Target].Add(targetId);
     }
 }

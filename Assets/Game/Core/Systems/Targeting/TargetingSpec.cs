@@ -1,38 +1,36 @@
-using System.Collections.Generic;
-
 public interface ITargetingSpec
 {
     Geid Id { get; set; }
     string Description { get; set; }
     TargetingType Type { get; set; }
-    
+
     /// <summary>
-    /// Фильтр для определения валидных целей
+    /// Р¤РёР»СЊС‚СЂ РґР»СЏ РѕРїСЂРµРґРµР»РµРЅРёСЏ РґРѕРїСѓСЃС‚РёРјС‹С… С†РµР»РµР№.
     /// </summary>
     ITargetFilter TargetFilter { get; set; }
-    
+
     /// <summary>
-    /// Селектор для выбора целей из кандидатов
+    /// РЎРµР»РµРєС‚РѕСЂ РґР»СЏ РІС‹Р±РѕСЂР° С†РµР»РµР№ РёР· РґРѕРїСѓСЃС‚РёРјС‹С….
     /// </summary>
     ITargetSelector Selector { get; set; }
-    
+
     /// <summary>
-    /// Минимальное количество целей (если не удается выбрать - fizzle)
+    /// РњРёРЅРёРјР°Р»СЊРЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ С†РµР»РµР№ (РµСЃР»Рё РЅРµ РЅР°Р±РµСЂС‘С‚СЃСЏ вЂ” fizzle).
     /// </summary>
     int MinTargets { get; set; }
-    
+
     /// <summary>
-    /// Максимальное количество целей
+    /// РњР°РєСЃРёРјР°Р»СЊРЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ С†РµР»РµР№.
     /// </summary>
     int MaxTargets { get; set; }
-    
+
     /// <summary>
-    /// Роль, которую получат выбранные цели в SubjectsList
+    /// Р РѕР»СЊ, РїРѕРґ РєРѕС‚РѕСЂРѕР№ РІС‹Р±СЂР°РЅРЅС‹Рµ С†РµР»Рё РґРѕР±Р°РІР»СЏСЋС‚СЃСЏ РІ Subjects.
     /// </summary>
     SubjectRole TargetRole { get; set; }
-    
+
     /// <summary>
-    /// Источник кандидатов для таргетинга (null = все сущности на поле боя)
+    /// РЎСѓС‰РЅРѕСЃС‚СЊ-РёСЃС‚РѕС‡РЅРёРє РґР»СЏ С‚Р°СЂРіРµС‚РёРЅРіР° (null = Р±РµР· С„РёР»СЊС‚СЂР° РїРѕ РёСЃС‚РѕС‡РЅРёРєСѓ).
     /// </summary>
     Geid? SourceEntity { get; set; }
 }

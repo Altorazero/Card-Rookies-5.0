@@ -1,7 +1,5 @@
 using System;
-using System.Linq;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 public class ShieldSystem : IEventListener<SingleDamageEvent, IModifyPhaseEvent>
 {
@@ -10,8 +8,8 @@ public class ShieldSystem : IEventListener<SingleDamageEvent, IModifyPhaseEvent>
 
     void IEventListener<SingleDamageEvent, IModifyPhaseEvent>.OnEvent(EventContext context, SingleDamageEvent evt)
     {
-        var tgt = evt.SubjectsList.SingleOrDefault(t => t.Role == SubjectRole.Target).Entity;
-        var shieldComp = context.BattleState.GetEntity(tgt).GetComponent<ShieldComponent>();
+        var tgt = evt.GetFirstSubject(SubjectRole.Target);
+        var shieldComp = context.BattleState.GetEntity(tgt)?.GetComponent<ShieldComponent>();
 
         if (shieldComp != null && shieldComp.ShieldValue > 0)
         {
@@ -19,7 +17,6 @@ public class ShieldSystem : IEventListener<SingleDamageEvent, IModifyPhaseEvent>
             shieldComp.ShieldValue -= damageToShield;
             evt.DamageAmount -= damageToShield;
             Debug.Log($"Entity {tgt} absorbed {damageToShield} damage with shield. Remaining shield: {shieldComp.ShieldValue}");
-            // Если весь урон поглощен щитом, отменяем дальнейшую обработку урона
             if (evt.DamageAmount <= 0)
             {
                 evt.Status = EventStatus.Cancelled;
