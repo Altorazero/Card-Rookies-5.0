@@ -14,15 +14,12 @@ public class HealSelfCard : IPlayingCard
         Id = Geid.New;
         
         // ������� ������������ ���������� ��� �������������
-        var targetingSpec = new TargetingSpec
-        {
-            Description = "Target self",
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target
-        }.AddFilter(new SelfTargetFilter());
+        var targetingSpec = new TargetingSpec { Description = "Target self", TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new SelfTargetFilter()))
+            .AddStep(new TakeSorter(1))
+            .AddStep(new ExitConditionStep(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
         
         // ������� ������� ��������� � �����������
         var healEvent = new HealEventWithTargeting(Id, Id, Geid.Empty, healAmount, targetingSpec);

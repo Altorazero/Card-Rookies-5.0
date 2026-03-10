@@ -13,15 +13,12 @@ public class NewTestScript
         Debug.Log("Event id: " + @event.Id);
         Debug.Log("Event source id: " + @event.SystemSourceId);
 
-        var targetingSpec = new TargetingSpec
-        {
-            Description = "Single target damage",
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target
-        }.AddFilter(new AlwaysValidFilter());
+        var targetingSpec = new TargetingSpec { Description = "Single target damage", TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new AlwaysValidFilter()))
+            .AddStep(new TakeSorter(1))
+            .AddStep(new ExitConditionStep(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
 
         MassDamageEvent damageEvent = new(Geid.New, Geid.New, Geid.New, 10, targetingSpec);
         Debug.Log("DamageEvent id: " + damageEvent.Id);
@@ -59,16 +56,12 @@ public class NewTestScript
         var sourcePower = new PowerComponent(50);
         sourceEntity.AddComponent(sourcePower);
 
-        var singleTargetSpec = new TargetingSpec
-        {
-            Description = "Single target",
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-            SourceEntity = sourceEntity.Id
-        }.AddFilter(new AlwaysValidFilter());
+        var singleTargetSpec = new TargetingSpec { Description = "Single target", TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new AlwaysValidFilter()))
+            .AddStep(new TakeSorter(1))
+            .AddStep(new ExitConditionStep(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
 
         SingleDamageEvent damageEvent = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 80);
         SingleDamageEvent damageEvent1 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 30);
@@ -117,16 +110,12 @@ public class NewTestScript
         var sourceVamp = new VampComponent(0.5f);
         sourceEntity.AddComponent(sourceVamp);
 
-        var massTargetSpec = new TargetingSpec
-        {
-            Description = "Mass damage - single target",
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-            SourceEntity = sourceEntity.Id
-        }.AddFilter(new AlwaysValidFilter());
+        var massTargetSpec = new TargetingSpec { Description = "Mass damage - single target", TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new AlwaysValidFilter()))
+            .AddStep(new TakeSorter(1))
+            .AddStep(new ExitConditionStep(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
 
         MassDamageEvent damageEvent = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 80, massTargetSpec);
         MassDamageEvent damageEvent1 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 30, massTargetSpec);
@@ -184,38 +173,26 @@ public class NewTestScript
         var targetHex = new HexComponent(new HexCoordinates(1, 0));
         targetEntity.AddComponent(targetHex);
 
-        var damageTargetSpec = new TargetingSpec
-        {
-            Description = "Damage target",
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-            SourceEntity = sourceEntity.Id
-        }.AddFilter(new AlwaysValidFilter());
+        var damageTargetSpec = new TargetingSpec { Description = "Damage target", TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new AlwaysValidFilter()))
+            .AddStep(new TakeSorter(1))
+            .AddStep(new ExitConditionStep(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
 
-        var healTargetSpec = new TargetingSpec
-        {
-            Description = "Heal target",
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-            SourceEntity = sourceEntity.Id
-        }.AddFilter(new AlwaysValidFilter());
+        var healTargetSpec = new TargetingSpec { Description = "Heal target", TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new AlwaysValidFilter()))
+            .AddStep(new TakeSorter(1))
+            .AddStep(new ExitConditionStep(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
 
-        var selfHealSpec = new TargetingSpec
-        {
-            Description = "Self heal",
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-            SourceEntity = sourceEntity.Id
-        }.AddFilter(new SelfTargetFilter());
+        var selfHealSpec = new TargetingSpec { Description = "Self heal", TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new SelfTargetFilter()))
+            .AddStep(new TakeSorter(1))
+            .AddStep(new ExitConditionStep(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
 
         MassDamageEvent damageEvent = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 18, damageTargetSpec);
         MassDamageEvent damageEvent1 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 30, damageTargetSpec);
@@ -322,16 +299,9 @@ public class NewTestScript
 
         var healthFilter = new HealthThresholdFilter(20);
 
-        var targetingSpec = new TargetingSpec
-        {
-            Description = "Target low health entities",
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 0,
-            MaxTargets = TargetCount.All,
-            TargetRole = SubjectRole.Target,
-            SourceEntity = source.Id
-        }.AddFilter(healthFilter);
+        var targetingSpec = new TargetingSpec { Description = "Target low health entities", TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(healthFilter));
 
         var damageEvent = new MassDamageEvent(source.Id, source.Id, Geid.Empty, 10, targetingSpec);
 

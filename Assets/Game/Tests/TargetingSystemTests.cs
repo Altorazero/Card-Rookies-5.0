@@ -1,11 +1,13 @@
 using NUnit.Framework;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
 /// <summary>
-/// Полный набор тестов для системы таргетинга (TargetingSystem + TargetingSpec).
-/// Покрывает: фильтры, приоритеты, количество целей, поведение при нехватке целей, роли.
+/// Полный набор тестов для системы таргетинга (пайплайн-архитектура).
+/// Покрывает: пулы, фильтры (And/Or/Not), сортировщики, условия выхода,
+/// составные фильтры, гексагональные фильтры и формы.
 /// </summary>
 public class TargetingSystemTests
 {
@@ -23,22 +25,17 @@ public class TargetingSystemTests
 
     private static BaseEntity AddEntity(BattleState state, int hp = 100, HexCoordinates? hex = null)
     {
-        var entity = new BaseEntity();
-        entity.AddComponent(new HealthComponent(hp));
-        if (hex.HasValue)
-            entity.AddComponent(new HexComponent(hex.Value));
-        state.AddEntity(entity);
-        return entity;
+        var e = new BaseEntity();
+        e.AddComponent(new HealthComponent(hp));
+        if (hex.HasValue) e.AddComponent(new HexComponent(hex.Value));
+        state.AddEntity(e);
+        return e;
     }
 
-    /// <summary>
-    /// Минимальное событие-заглушка, реализующее INeedTargeting.
-    /// </summary>
-    private class TestTargetingEvent :
+    /// <summary>Минимальное тестовое событие, реализующее INeedTargeting.</summary>
+    private class TestEvent :
         IGameEvent, IHaveSubjects,
-        ITargetResolvePhaseEvent,
-        IGuardPhaseEvent,
-        IApplyPhaseEvent,
+        ITargetResolvePhaseEvent, IGuardPhaseEvent, IApplyPhaseEvent,
         INeedTargeting
     {
         public EventStatus Status { get; set; } = EventStatus.Pending;
@@ -47,7 +44,7 @@ public class TargetingSystemTests
         public List<List<Geid>> Subjects { get; set; }
         public ITargetingSpec TargetingSpec { get; set; }
 
-        public TestTargetingEvent(Geid sourceId, ITargetingSpec spec)
+        public TestEvent(Geid sourceId, ITargetingSpec spec)
         {
             SystemSourceId = sourceId;
             TargetingSpec = spec;
@@ -56,777 +53,887 @@ public class TargetingSystemTests
     }
 
     // -----------------------------------------------------------------------
-    // 1. No targeting spec → event is not fizzled
+    // 1. Нет спека → событие продолжается без изменения статуса
     // -----------------------------------------------------------------------
 
     [Test]
     public void NoTargetingSpec_EventContinuesNormally()
     {
         var (state, queue) = CreateQueue();
-        var source = AddEntity(state);
+        var src = AddEntity(state);
 
-        var evt = new TestTargetingEvent(source.Id, null);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        Assert.AreNotEqual(EventStatus.Fizzled, evt.Status,
-            "Event without targeting spec should not be fizzled.");
-        Debug.Log("NoTargetingSpec_EventContinuesNormally passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 2. TargetingType.None → no candidates, event fizzles (MinTargets = 1)
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void TargetingTypeNone_NoTargetsFound_Fizzles()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.None,
-            MinTargets = 1,
-            MaxTargets = 1,
-        };
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        Assert.AreEqual(EventStatus.Fizzled, evt.Status,
-            "TargetingType.None should yield 0 candidates → fizzle when MinTargets = 1.");
-        Debug.Log("TargetingTypeNone_NoTargetsFound_Fizzles passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 3. Empty filter list → all candidates accepted
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void NoFilters_AllEntitiesSelected()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state);
-        var e1 = AddEntity(state);
-        var e2 = AddEntity(state);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 0,
-            MaxTargets = TargetCount.All,
-            TargetRole = SubjectRole.Target,
-        };
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target);
-        Assert.AreEqual(3, targets.Count,
-            "Without filters all 3 entities should be selected.");
-        Debug.Log("NoFilters_AllEntitiesSelected passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 4. Single filter selects only matching entities
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void SingleFilter_OnlyMatchingEntitiesSelected()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 100);
-        var lowHp = AddEntity(state, hp: 10);
-        var highHp = AddEntity(state, hp: 80);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 0,
-            MaxTargets = TargetCount.All,
-            TargetRole = SubjectRole.Target,
-        }.AddFilter(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThanOrEqual, 20));
-
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
-        Assert.AreEqual(1, targets.Count, "Only the low-HP entity should pass the filter.");
-        Assert.IsTrue(targets.Contains(lowHp.Id), "Low-HP entity should be in targets.");
-        Assert.IsFalse(targets.Contains(highHp.Id), "High-HP entity should NOT be in targets.");
-        Debug.Log("SingleFilter_OnlyMatchingEntitiesSelected passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 5. Multiple filters with AND logic
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void MultipleFilters_AndLogic_OnlyBothConditionsMet()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 100);
-
-        // Entity A: HP 30 — passes both (<= 50 AND >= 20)
-        var entityA = AddEntity(state, hp: 30);
-        // Entity B: HP 10 — passes first but not second (< 20)
-        var entityB = AddEntity(state, hp: 10);
-        // Entity C: HP 60 — fails first (> 50)
-        var entityC = AddEntity(state, hp: 60);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 0,
-            MaxTargets = TargetCount.All,
-            TargetRole = SubjectRole.Target,
-        }
-        .AddFilter(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThanOrEqual, 50))
-        .AddFilter(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.GreaterThanOrEqual, 20));
-
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
-        Assert.AreEqual(1, targets.Count, "Only entityA satisfies both filters.");
-        Assert.IsTrue(targets.Contains(entityA.Id), "entityA (HP=30) should be selected.");
-        Assert.IsFalse(targets.Contains(entityB.Id), "entityB (HP=10) should NOT be selected.");
-        Assert.IsFalse(targets.Contains(entityC.Id), "entityC (HP=60) should NOT be selected.");
-        Debug.Log("MultipleFilters_AndLogic_OnlyBothConditionsMet passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 6. SelfTargetFilter selects only the source entity
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void SelfFilter_SelectsOnlySourceEntity()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state);
-        var other = AddEntity(state);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-            SourceEntity = source.Id,
-        }.AddFilter(new SelfTargetFilter());
-
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
-        Assert.AreEqual(1, targets.Count, "SelfFilter should select exactly 1 target.");
-        Assert.AreEqual(source.Id, targets[0], "Selected target should be the source entity.");
-        Debug.Log("SelfFilter_SelectsOnlySourceEntity passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 7. Priority: HighestHp selects entity with most HP
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void PriorityHighestHp_SelectsEntityWithMostHp()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 1);
-        var lowHp = AddEntity(state, hp: 10);
-        var midHp = AddEntity(state, hp: 50);
-        var highHp = AddEntity(state, hp: 90);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.HighestHp,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-        };
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
-        Assert.AreEqual(1, targets.Count);
-        Assert.AreEqual(highHp.Id, targets[0],
-            "HighestHp priority should select the entity with 90 HP.");
-        Debug.Log("PriorityHighestHp_SelectsEntityWithMostHp passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 8. Priority: LowestHp selects entity with least HP
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void PriorityLowestHp_SelectsEntityWithLeastHp()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 100);
-        var lowHp = AddEntity(state, hp: 5);
-        var midHp = AddEntity(state, hp: 50);
-        var highHp = AddEntity(state, hp: 90);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.LowestHp,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-        };
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
-        Assert.AreEqual(1, targets.Count);
-        Assert.AreEqual(lowHp.Id, targets[0],
-            "LowestHp priority should select the entity with 5 HP.");
-        Debug.Log("PriorityLowestHp_SelectsEntityWithLeastHp passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 9. Priority: Nearest selects closest entity by hex distance
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void PriorityNearest_SelectsClosestEntityByHex()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hex: new HexCoordinates(0, 0));
-        var near = AddEntity(state, hex: new HexCoordinates(1, 0));   // distance 1
-        var far = AddEntity(state, hex: new HexCoordinates(5, 0));    // distance 5
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.Nearest,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-            SourceEntity = source.Id,
-        };
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
-        Assert.AreEqual(1, targets.Count);
-        Assert.AreEqual(near.Id, targets[0],
-            "Nearest priority should select the entity at distance 1, not 5.");
-        Debug.Log("PriorityNearest_SelectsClosestEntityByHex passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 10. Priority: Random — same seed produces same result
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void PriorityRandom_SameSeedProducesSameResult()
-    {
-        // Run twice with the same seed; results must match
-        Geid[] RunWithSeed(int seed)
-        {
-            var state = new BattleState(seed);
-            var queue = new EventQueue(state);
-            queue.Subscribe(new TargetingSystem());
-
-            var source = AddEntity(state);
-            for (int i = 0; i < 5; i++)
-                AddEntity(state);
-
-            var spec = new TargetingSpec
-            {
-                Type = TargetingType.Entity,
-                Priority = TargetPriority.Random,
-                MinTargets = 1,
-                MaxTargets = 3,
-                TargetRole = SubjectRole.Target,
-            };
-            var evt = new TestTargetingEvent(source.Id, spec);
-            queue.Enqueue(evt);
-            queue.ProcessQueue();
-            return evt.GetSubjects(SubjectRole.Target).ToArray();
-        }
-
-        var run1 = RunWithSeed(9999);
-        var run2 = RunWithSeed(9999);
-
-        Assert.AreEqual(3, run1.Length, "Should select 3 targets.");
-        Assert.AreEqual(run1.Length, run2.Length, "Both runs should return same count.");
-        for (int i = 0; i < run1.Length; i++)
-            Assert.AreEqual(run1[i], run2[i], $"Target at index {i} should match across runs.");
-        Debug.Log("PriorityRandom_SameSeedProducesSameResult passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 11. MaxTargets limits the selection
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void MaxTargets_LimitsSelection()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state);
-        for (int i = 0; i < 5; i++)
-            AddEntity(state);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 0,
-            MaxTargets = 2,
-            TargetRole = SubjectRole.Target,
-        };
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target);
-        Assert.AreEqual(2, targets.Count, "MaxTargets = 2 should select exactly 2 entities.");
-        Debug.Log("MaxTargets_LimitsSelection passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 12. MaxTargets = TargetCount.All selects every valid candidate
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void MaxTargetsAll_SelectsAllValidCandidates()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state);
-        AddEntity(state); AddEntity(state); AddEntity(state);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 0,
-            MaxTargets = TargetCount.All,
-            TargetRole = SubjectRole.Target,
-        };
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target);
-        Assert.AreEqual(4, targets.Count,
-            "TargetCount.All should select all 4 entities (source + 3 others).");
-        Debug.Log("MaxTargetsAll_SelectsAllValidCandidates passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 13. MinTargets = 0 allows empty target list without fizzle
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void MinTargetsZero_EmptyResultAllowed()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 100);
-
-        // Filter that accepts nothing
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 0,
-            MaxTargets = TargetCount.All,
-            TargetRole = SubjectRole.Target,
-        }.AddFilter(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 0));
-
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        Assert.AreNotEqual(EventStatus.Fizzled, evt.Status,
-            "MinTargets = 0 should allow 0 results without fizzling.");
-        Assert.AreEqual(0, evt.GetSubjects(SubjectRole.Target).Count,
-            "Target list should be empty when nothing passes the filter.");
-        Debug.Log("MinTargetsZero_EmptyResultAllowed passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 14. InsufficientTargets: Cancel → EventStatus.Fizzled
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void InsufficientTargets_Cancel_EventFizzles()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 100);
-        // No entity passes hp < 0
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            MinTargets = 1,
-            MaxTargets = 1,
-            OnInsufficientTargets = InsufficientTargetsBehavior.Cancel,
-        }.AddFilter(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 0));
-
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        Assert.AreEqual(EventStatus.Fizzled, evt.Status,
-            "Cancel behavior should set status to Fizzled when targets are insufficient.");
-        Debug.Log("InsufficientTargets_Cancel_EventFizzles passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 15. InsufficientTargets: UseFound → proceeds with partial target list
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void InsufficientTargets_UseFound_ProceedsWithPartialTargets()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 100);
-        var lowHp = AddEntity(state, hp: 5);
-        // Only 1 entity passes hp <= 10, but MinTargets = 2
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 2,
-            MaxTargets = TargetCount.All,
-            TargetRole = SubjectRole.Target,
-            OnInsufficientTargets = InsufficientTargetsBehavior.UseFound,
-        }.AddFilter(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThanOrEqual, 10));
-
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        Assert.AreNotEqual(EventStatus.Fizzled, evt.Status,
-            "UseFound should not fizzle the event.");
-        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
-        Assert.AreEqual(1, targets.Count, "Should proceed with 1 found target.");
-        Assert.IsTrue(targets.Contains(lowHp.Id), "Found target should be the low-HP entity.");
-        Debug.Log("InsufficientTargets_UseFound_ProceedsWithPartialTargets passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 16. InsufficientTargets: ShootVoid → event continues, Subjects empty
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void InsufficientTargets_ShootVoid_EventContinuesWithNoTargets()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 100);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-            OnInsufficientTargets = InsufficientTargetsBehavior.ShootVoid,
-        }.AddFilter(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 0));
-
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        Assert.AreNotEqual(EventStatus.Fizzled, evt.Status,
-            "ShootVoid should not fizzle the event.");
-        Assert.AreNotEqual(EventStatus.Cancelled, evt.Status,
-            "ShootVoid should not cancel the event.");
-        Assert.AreEqual(0, evt.GetSubjects(SubjectRole.Target).Count,
-            "ShootVoid should leave Subjects empty.");
-        Debug.Log("InsufficientTargets_ShootVoid_EventContinuesWithNoTargets passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 17. InsufficientTargets: AlternativeEffect → original cancelled, alt dispatched
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void InsufficientTargets_AlternativeEffect_AltEventDispatched()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 100);
-
-        IGameEvent capturedAlt = null;
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            MinTargets = 1,
-            MaxTargets = 1,
-            OnInsufficientTargets = InsufficientTargetsBehavior.AlternativeEffect,
-            AlternativeEffectFactory = ctx =>
-            {
-                var alt = new TestTargetingEvent(source.Id, null);
-                capturedAlt = alt;
-                return alt;
-            },
-        }.AddFilter(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 0));
-
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        Assert.AreEqual(EventStatus.Cancelled, evt.Status,
-            "Original event should be Cancelled when AlternativeEffect is triggered.");
-        Assert.IsNotNull(capturedAlt, "AlternativeEffectFactory should have been called.");
-        Debug.Log("InsufficientTargets_AlternativeEffect_AltEventDispatched passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 18. AlternativeEffect with null factory → original cancelled, no crash
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void InsufficientTargets_AlternativeEffectNullFactory_OriginalCancelled()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 100);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            MinTargets = 1,
-            MaxTargets = 1,
-            OnInsufficientTargets = InsufficientTargetsBehavior.AlternativeEffect,
-            AlternativeEffectFactory = null,
-        }.AddFilter(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 0));
-
-        var evt = new TestTargetingEvent(source.Id, spec);
-        Assert.DoesNotThrow(() =>
-        {
-            queue.Enqueue(evt);
-            queue.ProcessQueue();
-        }, "Null factory should not throw an exception.");
-        Assert.AreEqual(EventStatus.Cancelled, evt.Status,
-            "Original event should be Cancelled even with null factory.");
-        Debug.Log("InsufficientTargets_AlternativeEffectNullFactory_OriginalCancelled passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 19. Targets placed in correct custom role (PrimaryTarget)
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void TargetRole_PrimaryTarget_TargetsPlacedCorrectly()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state);
-        var target = AddEntity(state);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.PrimaryTarget,
-            SourceEntity = source.Id,
-        }.AddFilter(new SelfTargetFilter());  // selects source
-
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var primaryTargets = evt.GetSubjects(SubjectRole.PrimaryTarget).ToList();
-        var regularTargets = evt.GetSubjects(SubjectRole.Target).ToList();
-
-        Assert.AreEqual(1, primaryTargets.Count,
-            "One entity should be placed in PrimaryTarget role.");
-        Assert.AreEqual(0, regularTargets.Count,
-            "Regular Target role should remain empty.");
-        Assert.AreEqual(source.Id, primaryTargets[0]);
-        Debug.Log("TargetRole_PrimaryTarget_TargetsPlacedCorrectly passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 20. Multiple targets selected and all placed in Subjects
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void MultipleTargets_AllPlacedInSubjects()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state);
-        var e1 = AddEntity(state);
-        var e2 = AddEntity(state);
-        var e3 = AddEntity(state);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 3,
-            MaxTargets = 3,
-            TargetRole = SubjectRole.Target,
-        };
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
-        Assert.AreEqual(3, targets.Count, "Exactly 3 targets should be selected.");
-        Debug.Log("MultipleTargets_AllPlacedInSubjects passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 21. HighestHp priority selects top-N when MaxTargets > 1
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void PriorityHighestHp_TopN_CorrectOrder()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hp: 1);
-        var hp10 = AddEntity(state, hp: 10);
-        var hp50 = AddEntity(state, hp: 50);
-        var hp90 = AddEntity(state, hp: 90);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.HighestHp,
-            MinTargets = 2,
-            MaxTargets = 2,
-            TargetRole = SubjectRole.Target,
-        };
-        var evt = new TestTargetingEvent(source.Id, spec);
-        queue.Enqueue(evt);
-        queue.ProcessQueue();
-
-        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
-        Assert.AreEqual(2, targets.Count, "Should select 2 targets.");
-        Assert.IsTrue(targets.Contains(hp90.Id), "HP=90 should be selected.");
-        Assert.IsTrue(targets.Contains(hp50.Id), "HP=50 should be selected.");
-        Assert.IsFalse(targets.Contains(hp10.Id), "HP=10 should NOT be selected.");
-        Debug.Log("PriorityHighestHp_TopN_CorrectOrder passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 22. Nearest priority: no source entity → falls back to First order
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void PriorityNearest_NoSourceEntity_FallsBackToFirst()
-    {
-        var (state, queue) = CreateQueue();
-        var source = AddEntity(state, hex: new HexCoordinates(0, 0));
-        var near = AddEntity(state, hex: new HexCoordinates(1, 0));
-        var far = AddEntity(state, hex: new HexCoordinates(5, 0));
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.Nearest,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-            SourceEntity = null,  // no source — should not crash
-        };
-        Assert.DoesNotThrow(() =>
-        {
-            var evt = new TestTargetingEvent(source.Id, spec);
-            queue.Enqueue(evt);
-            queue.ProcessQueue();
-        }, "Nearest without SourceEntity should not throw.");
-        Debug.Log("PriorityNearest_NoSourceEntity_FallsBackToFirst passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 23. Nearest priority: source entity has no HexComponent → falls back
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void PriorityNearest_SourceHasNoHex_FallsBackGracefully()
-    {
-        var (state, queue) = CreateQueue();
-        // Source has NO HexComponent
-        var source = new BaseEntity();
-        source.AddComponent(new HealthComponent(100));
-        state.AddEntity(source);
-
-        var near = AddEntity(state, hex: new HexCoordinates(1, 0));
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.Nearest,
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target,
-            SourceEntity = source.Id,
-        };
-        Assert.DoesNotThrow(() =>
-        {
-            var evt = new TestTargetingEvent(source.Id, spec);
-            queue.Enqueue(evt);
-            queue.ProcessQueue();
-        }, "Nearest with source having no HexComponent should not throw.");
-        Debug.Log("PriorityNearest_SourceHasNoHex_FallsBackGracefully passed.");
-    }
-
-    // -----------------------------------------------------------------------
-    // 24. TargetCount.All is respected even when entities = 0
-    // -----------------------------------------------------------------------
-
-    [Test]
-    public void MaxTargetsAll_EmptyBattlefield_ZeroTargets()
-    {
-        var (state, queue) = CreateQueue();
-        // Source is the only entity; filter excludes it
-        var source = AddEntity(state, hp: 100);
-
-        var spec = new TargetingSpec
-        {
-            Type = TargetingType.Entity,
-            Priority = TargetPriority.First,
-            MinTargets = 0,
-            MaxTargets = TargetCount.All,
-            TargetRole = SubjectRole.Target,
-        }.AddFilter(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 0));
-
-        var evt = new TestTargetingEvent(source.Id, spec);
+        var evt = new TestEvent(src.Id, null);
         queue.Enqueue(evt);
         queue.ProcessQueue();
 
         Assert.AreNotEqual(EventStatus.Fizzled, evt.Status);
-        Assert.AreEqual(0, evt.GetSubjects(SubjectRole.Target).Count);
-        Debug.Log("MaxTargetsAll_EmptyBattlefield_ZeroTargets passed.");
+        Debug.Log("NoTargetingSpec_EventContinuesNormally passed.");
     }
 
     // -----------------------------------------------------------------------
-    // 25. Verify TargetingSpec.AddFilter returns this (fluent chain)
+    // 2. Пустой пайплайн → кандидаты пусты, цели не записаны, событие Pending
     // -----------------------------------------------------------------------
 
     [Test]
-    public void TargetingSpec_AddFilter_FluentChainingWorks()
+    public void EmptyPipeline_NoTargetsCommitted_EventPending()
     {
-        var filter1 = new AlwaysValidFilter();
-        var filter2 = new SelfTargetFilter();
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target };
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        Assert.AreEqual(EventStatus.Pending, evt.Status);
+        Assert.AreEqual(0, evt.GetSubjects(SubjectRole.Target).Count);
+        Debug.Log("EmptyPipeline_NoTargetsCommitted_EventPending passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. AllEntitiesPool → все сущности в кандидатах
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void AllEntitiesPool_AddsAllEntities()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+        var e1 = AddEntity(state);
+        var e2 = AddEntity(state);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool());
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target);
+        Assert.AreEqual(3, targets.Count, "AllEntitiesPool должен добавить все 3 сущности.");
+        Debug.Log("AllEntitiesPool_AddsAllEntities passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 4. EmptyPool → очищает кандидатов
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void EmptyPool_ClearsCandidates()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+        AddEntity(state); AddEntity(state);
+
+        // AllEntities → затем EmptyPool → затем ExplicitEntitiesPool с одной сущностью
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new EmptyPool())
+            .AddStep(new ExplicitEntitiesPool(src.Id));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target);
+        Assert.AreEqual(1, targets.Count, "После EmptyPool должна остаться только одна явная сущность.");
+        Assert.AreEqual(src.Id, targets[0]);
+        Debug.Log("EmptyPool_ClearsCandidates passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. ExplicitEntitiesPool → только указанные сущности
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void ExplicitEntitiesPool_AddsOnlySpecified()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+        var e1 = AddEntity(state);
+        var e2 = AddEntity(state);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new ExplicitEntitiesPool(e1.Id));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target);
+        Assert.AreEqual(1, targets.Count);
+        Assert.AreEqual(e1.Id, targets[0]);
+        Debug.Log("ExplicitEntitiesPool_AddsOnlySpecified passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. FilterStep — одиночный фильтр
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void FilterStep_SingleFilter_RemovesNonMatching()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hp: 100);
+        var lowHp = AddEntity(state, hp: 10);
+        var highHp = AddEntity(state, hp: 80);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThanOrEqual, 20)));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(1, targets.Count);
+        Assert.IsTrue(targets.Contains(lowHp.Id));
+        Assert.IsFalse(targets.Contains(highHp.Id));
+        Debug.Log("FilterStep_SingleFilter_RemovesNonMatching passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. AndTargetFilter — AND-логика двух фильтров
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void AndTargetFilter_BothMustPass()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hp: 100);
+        var entityA = AddEntity(state, hp: 30); // 20 ≤ 30 ≤ 50 → проходит оба
+        var entityB = AddEntity(state, hp: 10); // 10 < 20 → не проходит второй
+        var entityC = AddEntity(state, hp: 60); // 60 > 50 → не проходит первый
+
+        var filter = new AndTargetFilter(
+            new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThanOrEqual, 50),
+            new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.GreaterThanOrEqual, 20));
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(filter));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(1, targets.Count);
+        Assert.IsTrue(targets.Contains(entityA.Id));
+        Assert.IsFalse(targets.Contains(entityB.Id));
+        Assert.IsFalse(targets.Contains(entityC.Id));
+        Debug.Log("AndTargetFilter_BothMustPass passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 8. OrTargetFilter — OR-логика двух фильтров
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void OrTargetFilter_EitherSuffices()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hp: 50);
+        var veryLow = AddEntity(state, hp: 5);   // проходит hp < 10
+        var veryHigh = AddEntity(state, hp: 95); // проходит hp > 90
+        var middle = AddEntity(state, hp: 50);   // не проходит ни один
+
+        var filter = new OrTargetFilter(
+            new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 10),
+            new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.GreaterThan, 90));
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(filter));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(2, targets.Count, "Должны пройти 2 сущности (< 10 ИЛИ > 90).");
+        Assert.IsTrue(targets.Contains(veryLow.Id));
+        Assert.IsTrue(targets.Contains(veryHigh.Id));
+        Assert.IsFalse(targets.Contains(middle.Id));
+        Debug.Log("OrTargetFilter_EitherSuffices passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 9. NotTargetFilter — инверсия
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void NotTargetFilter_InvertsResult()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+        var other = AddEntity(state);
+
+        // NOT(Self) → принять всё кроме src
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new NotTargetFilter(new SelfTargetFilter())));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.IsFalse(targets.Contains(src.Id), "src должен быть исключён через NOT(Self).");
+        Assert.IsTrue(targets.Contains(other.Id), "other должен быть включён.");
+        Debug.Log("NotTargetFilter_InvertsResult passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 10. SelfTargetFilter — только источник события
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void SelfFilter_SelectsOnlySource()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+        var other = AddEntity(state);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new SelfTargetFilter()))
+            .AddStep(new TakeSorter(1))
+            .AddStep(new ExitConditionStep(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(1, targets.Count);
+        Assert.AreEqual(src.Id, targets[0]);
+        Debug.Log("SelfFilter_SelectsOnlySource passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 11. TakeSorter — ограничивает количество кандидатов
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void TakeSorter_LimitsCount()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+        for (int i = 0; i < 5; i++) AddEntity(state);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new TakeSorter(2));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        Assert.AreEqual(2, evt.GetSubjects(SubjectRole.Target).Count);
+        Debug.Log("TakeSorter_LimitsCount passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 12. HighestHpSorter → выбирает первую сущность с наибольшим HP
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void HighestHpSorter_SelectsHighestHpEntity()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hp: 1);
+        var low = AddEntity(state, hp: 10);
+        var high = AddEntity(state, hp: 90);
+        var mid = AddEntity(state, hp: 50);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new HighestHpSorter())
+            .AddStep(new TakeSorter(1));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(1, targets.Count);
+        Assert.AreEqual(high.Id, targets[0], "HighestHpSorter должен выбрать сущность с HP=90.");
+        Debug.Log("HighestHpSorter_SelectsHighestHpEntity passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 13. LowestHpSorter → выбирает первую сущность с наименьшим HP
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void LowestHpSorter_SelectsLowestHpEntity()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hp: 100);
+        var low = AddEntity(state, hp: 5);
+        var mid = AddEntity(state, hp: 50);
+        var high = AddEntity(state, hp: 90);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new LowestHpSorter())
+            .AddStep(new TakeSorter(1));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(1, targets.Count);
+        Assert.AreEqual(low.Id, targets[0], "LowestHpSorter должен выбрать сущность с HP=5.");
+        Debug.Log("LowestHpSorter_SelectsLowestHpEntity passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 14. HighestHpSorter + TakeSorter(2) → берёт топ-2
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void HighestHpSorter_TopN()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hp: 1);
+        var hp10 = AddEntity(state, hp: 10);
+        var hp50 = AddEntity(state, hp: 50);
+        var hp90 = AddEntity(state, hp: 90);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new HighestHpSorter())
+            .AddStep(new TakeSorter(2));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(2, targets.Count);
+        Assert.IsTrue(targets.Contains(hp90.Id));
+        Assert.IsTrue(targets.Contains(hp50.Id));
+        Assert.IsFalse(targets.Contains(hp10.Id));
+        Debug.Log("HighestHpSorter_TopN passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 15. NearestSorter → ближайшая по гексагональному расстоянию
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void NearestSorter_SelectsClosestEntity()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hex: new HexCoordinates(0, 0));
+        var near = AddEntity(state, hex: new HexCoordinates(1, 0));  // dist=1
+        var far = AddEntity(state, hex: new HexCoordinates(5, 0));   // dist=5
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new NearestSorter(src.Id))
+            .AddStep(new TakeSorter(1));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(1, targets.Count);
+        // NearestSorter включает src как ближайшего кандидата (дистанция 0 от самого себя)
+        Assert.AreEqual(src.Id, targets[0],
+            "NearestSorter puts src first since dist(src, src) = 0.");
+        Debug.Log("NearestSorter_SelectsClosestEntity passed.");
+    }
+
+    [Test]
+    public void NearestSorter_ExcludesSelf_SelectsNearestOther()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hex: new HexCoordinates(0, 0));
+        var near = AddEntity(state, hex: new HexCoordinates(1, 0));
+        var far = AddEntity(state, hex: new HexCoordinates(5, 0));
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new NotTargetFilter(new SelfTargetFilter())))
+            .AddStep(new NearestSorter(src.Id))
+            .AddStep(new TakeSorter(1));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(1, targets.Count);
+        Assert.AreEqual(near.Id, targets[0], "Ближайшая НЕ-self — near (dist=1).");
+        Debug.Log("NearestSorter_ExcludesSelf_SelectsNearestOther passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 16. RandomSorter с одним seed — детерминированный результат
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void RandomSorter_SameSeedProducesSameOrder()
+    {
+        Geid[] Run(int seed)
+        {
+            var st = new BattleState(seed);
+            var q = new EventQueue(st);
+            q.Subscribe(new TargetingSystem());
+            var s = AddEntity(st);
+            for (int i = 0; i < 5; i++) AddEntity(st);
+            var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+                .AddStep(new AllEntitiesPool())
+                .AddStep(new RandomSorter())
+                .AddStep(new TakeSorter(3));
+            var e = new TestEvent(s.Id, spec);
+            q.Enqueue(e);
+            q.ProcessQueue();
+            return e.GetSubjects(SubjectRole.Target).ToArray();
+        }
+
+        var r1 = Run(77777);
+        var r2 = Run(77777);
+
+        Assert.AreEqual(3, r1.Length);
+        for (int i = 0; i < r1.Length; i++)
+            Assert.AreEqual(r1[i], r2[i], $"Индекс {i} должен совпадать при одинаковом seed.");
+        Debug.Log("RandomSorter_SameSeedProducesSameOrder passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 17. ExitConditionStep + FizzleTargetingAction → fizzle при нехватке
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void ExitCondition_FizzleWhenNotEnoughTargets()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hp: 100);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 0)))
+            .AddStep(new ExitConditionStep(
+                new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        Assert.AreEqual(EventStatus.Fizzled, evt.Status);
+        Debug.Log("ExitCondition_FizzleWhenNotEnoughTargets passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 18. ExitConditionStep + CancelTargetingAction
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void ExitCondition_CancelWhenNotEnoughTargets()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hp: 100);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 0)))
+            .AddStep(new ExitConditionStep(
+                new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new CancelTargetingAction()));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        Assert.AreEqual(EventStatus.Cancelled, evt.Status);
+        Debug.Log("ExitCondition_CancelWhenNotEnoughTargets passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 19. ExitConditionStep + AlternativeEffectAction → оригинал отменён, alt диспатчен
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void ExitCondition_AlternativeEffectDispatched()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hp: 100);
+        IGameEvent capturedAlt = null;
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 0)))
+            .AddStep(new ExitConditionStep(
+                new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new AlternativeEffectAction(ctx =>
+                {
+                    var alt = new TestEvent(src.Id, null);
+                    capturedAlt = alt;
+                    return alt;
+                })));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        Assert.AreEqual(EventStatus.Cancelled, evt.Status);
+        Assert.IsNotNull(capturedAlt, "AlternativeEffectAction должна была вызвать фабрику.");
+        Debug.Log("ExitCondition_AlternativeEffectDispatched passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 20. ExitConditionStep + CommitAndStopAction → цели зафиксированы досрочно
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void ExitCondition_CommitAndStop_CommitsCurrentCandidates()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+        var e1 = AddEntity(state);
+
+        // Pipeline: добавим e1 через ExplicitPool, зафиксируем и остановим,
+        // следующий AllEntitiesPool НЕ должен добавить src в цели
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new ExplicitEntitiesPool(e1.Id))
+            .AddStep(new ExitConditionStep(
+                new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onMet: new CommitAndStopAction()))
+            .AddStep(new AllEntitiesPool()); // этот шаг не должен выполниться
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(1, targets.Count);
+        Assert.AreEqual(e1.Id, targets[0]);
+        Assert.IsFalse(targets.Contains(src.Id), "src не должен попасть — pipeline остановлен.");
+        Debug.Log("ExitCondition_CommitAndStop_CommitsCurrentCandidates passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 21. ExitConditionStep: onMet = null и onNotMet = null → пайплайн продолжается
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void ExitCondition_BothActionsNull_PipelineContinues()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+        var e1 = AddEntity(state);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new ExitConditionStep(
+                new CandidateCountPredicate(ComparisonOperator.GreaterThan, 100))) // никогда не met
+            .AddStep(new TakeSorter(1));
+        var evt = new TestEvent(src.Id, spec);
+        Assert.DoesNotThrow(() =>
+        {
+            queue.Enqueue(evt);
+            queue.ProcessQueue();
+        });
+        Assert.AreEqual(EventStatus.Pending, evt.Status);
+        Assert.AreEqual(1, evt.GetSubjects(SubjectRole.Target).Count);
+        Debug.Log("ExitCondition_BothActionsNull_PipelineContinues passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 22. CandidateCountPredicate — все операторы
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void CandidateCountPredicate_AllOperators()
+    {
+        var sharedState = new BattleState(1);
+        var ctx = new EventContext(sharedState, new GameEvent(Geid.New), new EventQueue(sharedState));
+        var three = new List<Geid> { Geid.New, Geid.New, Geid.New };
+
+        Assert.IsTrue(new CandidateCountPredicate(ComparisonOperator.Equal, 3).Evaluate(three, ctx));
+        Assert.IsTrue(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 3).Evaluate(three, ctx));
+        Assert.IsTrue(new CandidateCountPredicate(ComparisonOperator.LessThanOrEqual, 3).Evaluate(three, ctx));
+        Assert.IsTrue(new CandidateCountPredicate(ComparisonOperator.GreaterThan, 2).Evaluate(three, ctx));
+        Assert.IsTrue(new CandidateCountPredicate(ComparisonOperator.LessThan, 4).Evaluate(three, ctx));
+        Assert.IsFalse(new CandidateCountPredicate(ComparisonOperator.Equal, 2).Evaluate(three, ctx));
+        Debug.Log("CandidateCountPredicate_AllOperators passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 23. Кастомная роль цели — PrimaryTarget
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void CustomTargetRole_PrimaryTarget()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+        AddEntity(state);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.PrimaryTarget }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new SelfTargetFilter()))
+            .AddStep(new TakeSorter(1));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        Assert.AreEqual(1, evt.GetSubjects(SubjectRole.PrimaryTarget).Count);
+        Assert.AreEqual(0, evt.GetSubjects(SubjectRole.Target).Count);
+        Debug.Log("CustomTargetRole_PrimaryTarget passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 24. Многошаговый пайплайн: Pool → Filter → Sort → Take → ExitCondition
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void MultistepPipeline_FullChain()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hp: 100);
+        var hp5 = AddEntity(state, hp: 5);
+        var hp30 = AddEntity(state, hp: 30);
+        var hp70 = AddEntity(state, hp: 70);
+
+        // Взять сущность с наименьшим HP из тех, у кого HP < 50
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new IMetricLevelTargetFilter<HealthComponent>(ComparisonOperator.LessThan, 50)))
+            .AddStep(new LowestHpSorter())
+            .AddStep(new TakeSorter(1))
+            .AddStep(new ExitConditionStep(
+                new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(1, targets.Count);
+        Assert.AreEqual(hp5.Id, targets[0], "Должна быть выбрана сущность с HP=5.");
+        Debug.Log("MultistepPipeline_FullChain passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 25. Повторяющийся пайплайн: два блока Pool→Filter→Sort→Commit+Stop
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void MultiBlockPipeline_SecondBlockAfterCommit_DoesNotExecute()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state);
+        var target = AddEntity(state);
+
+        // Первый блок: явно добавить target и зафиксировать
+        // Второй блок НЕ должен выполниться благодаря CommitAndStop
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new ExplicitEntitiesPool(target.Id))
+            .AddStep(new ExitConditionStep(
+                new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onMet: new CommitAndStopAction()))
+            .AddStep(new EmptyPool())         // этот шаг не должен выполниться
+            .AddStep(new AllEntitiesPool());  // этот шаг не должен выполниться
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.AreEqual(1, targets.Count);
+        Assert.AreEqual(target.Id, targets[0]);
+        Debug.Log("MultiBlockPipeline_SecondBlockAfterCommit_DoesNotExecute passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 26. HexCircleShape — диск
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void HexCircleShape_ContainsWithinRadius()
+    {
+        var shape = new HexCircleShape(2);
+        var origin = new HexCoordinates(0, 0);
+
+        Assert.IsTrue(shape.Contains(new HexCoordinates(0, 0), origin), "Центр входит.");
+        Assert.IsTrue(shape.Contains(new HexCoordinates(2, 0), origin), "dist=2 входит.");
+        Assert.IsTrue(shape.Contains(new HexCoordinates(1, 1), origin), "dist=2 входит (S=-2).");
+        Assert.IsFalse(shape.Contains(new HexCoordinates(3, 0), origin), "dist=3 не входит.");
+        Debug.Log("HexCircleShape_ContainsWithinRadius passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 27. HexRingShape — только точное расстояние
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void HexRingShape_ContainsOnlyAtExactRadius()
+    {
+        var shape = new HexRingShape(2);
+        var origin = new HexCoordinates(0, 0);
+
+        Assert.IsFalse(shape.Contains(new HexCoordinates(0, 0), origin), "Центр не входит.");
+        Assert.IsFalse(shape.Contains(new HexCoordinates(1, 0), origin), "dist=1 не входит.");
+        Assert.IsTrue(shape.Contains(new HexCoordinates(2, 0), origin), "dist=2 входит.");
+        Assert.IsFalse(shape.Contains(new HexCoordinates(3, 0), origin), "dist=3 не входит.");
+        Debug.Log("HexRingShape_ContainsOnlyAtExactRadius passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 28. HexLineShape — луч в одном направлении
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void HexLineShape_ContainsOnlyAlongDirection()
+    {
+        var dir = new HexCoordinates(1, 0);
+        var shape = new HexLineShape(dir, 3);
+        var origin = new HexCoordinates(0, 0);
+
+        Assert.IsTrue(shape.Contains(new HexCoordinates(1, 0), origin));
+        Assert.IsTrue(shape.Contains(new HexCoordinates(2, 0), origin));
+        Assert.IsTrue(shape.Contains(new HexCoordinates(3, 0), origin));
+        Assert.IsFalse(shape.Contains(new HexCoordinates(4, 0), origin), "Дальше MaxLength.");
+        Assert.IsFalse(shape.Contains(new HexCoordinates(0, 0), origin), "Сам origin.");
+        Assert.IsFalse(shape.Contains(new HexCoordinates(0, 1), origin), "Сбоку.");
+        Debug.Log("HexLineShape_ContainsOnlyAlongDirection passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 29. HexConeShape — конус вдоль оси
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void HexConeShape_ContainsWithinCone()
+    {
+        var dir = new HexCoordinates(1, 0);
+        var shape = new HexConeShape(dir, maxRadius: 2, halfSpread: 1);
+        var origin = new HexCoordinates(0, 0);
+
+        Assert.IsFalse(shape.Contains(origin, origin), "Origin не входит.");
+        Assert.IsTrue(shape.Contains(new HexCoordinates(1, 0), origin), "На оси depth=1.");
+        Assert.IsTrue(shape.Contains(new HexCoordinates(2, 0), origin), "На оси depth=2.");
+        // Сосед ячейки depth=1 на расстоянии ≤1
+        // Проверяем любой сосед (1,-1) от оси depth=1 → dist((1,0),(1,-1))=1 ≤ spread=1 ✓
+        Assert.IsTrue(shape.Contains(new HexCoordinates(1, -1), origin), "Сбоку depth=1, spread=1.");
+        Assert.IsFalse(shape.Contains(new HexCoordinates(3, 0), origin), "За MaxRadius=2.");
+        Debug.Log("HexConeShape_ContainsWithinCone passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 30. HexShapeFilter интегрируется с пайплайном
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void HexShapeFilter_IntegrationWithPipeline()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hex: new HexCoordinates(0, 0));
+        var near = AddEntity(state, hex: new HexCoordinates(1, 0));   // dist=1 → внутри radius=2
+        var far = AddEntity(state, hex: new HexCoordinates(5, 0));    // dist=5 → снаружи
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new HexRadiusFilter(src.Id, 2)));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.IsTrue(targets.Contains(src.Id),  "src (dist=0) входит в radius=2.");
+        Assert.IsTrue(targets.Contains(near.Id), "near (dist=1) входит в radius=2.");
+        Assert.IsFalse(targets.Contains(far.Id), "far (dist=5) не входит в radius=2.");
+        Debug.Log("HexShapeFilter_IntegrationWithPipeline passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 31. HexRingFilter — только сущности на точном расстоянии
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void HexRingFilter_OnlyExactDistance()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hex: new HexCoordinates(0, 0));
+        var dist1 = AddEntity(state, hex: new HexCoordinates(1, 0));
+        var dist2 = AddEntity(state, hex: new HexCoordinates(2, 0));
+        var dist3 = AddEntity(state, hex: new HexCoordinates(3, 0));
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new HexRingFilter(src.Id, 2)));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.IsFalse(targets.Contains(dist1.Id), "dist=1 не в кольце radius=2.");
+        Assert.IsTrue(targets.Contains(dist2.Id),  "dist=2 в кольце.");
+        Assert.IsFalse(targets.Contains(dist3.Id), "dist=3 не в кольце radius=2.");
+        Debug.Log("HexRingFilter_OnlyExactDistance passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 32. HexShapeFilter без HexComponent → пропускается
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void HexShapeFilter_TargetWithoutHex_Excluded()
+    {
+        var (state, queue) = CreateQueue();
+        var src = AddEntity(state, hex: new HexCoordinates(0, 0));
+        // Сущность без HexComponent
+        var noHex = new BaseEntity();
+        noHex.AddComponent(new HealthComponent(100));
+        state.AddEntity(noHex);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new HexRadiusFilter(src.Id, 5)));
+        var evt = new TestEvent(src.Id, spec);
+        queue.Enqueue(evt);
+        queue.ProcessQueue();
+
+        var targets = evt.GetSubjects(SubjectRole.Target).ToList();
+        Assert.IsFalse(targets.Contains(noHex.Id), "Сущность без HexComponent должна быть исключена.");
+        Debug.Log("HexShapeFilter_TargetWithoutHex_Excluded passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 33. NearestSorter без OriginEntity HexComponent → порядок не меняется
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void NearestSorter_NoSourceHex_OrderUnchanged()
+    {
+        var (state, queue) = CreateQueue();
+        var src = new BaseEntity();  // без HexComponent
+        src.AddComponent(new HealthComponent(100));
+        state.AddEntity(src);
+        var e1 = AddEntity(state);
+        var e2 = AddEntity(state);
+
+        var spec = new TargetingSpec { TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new NearestSorter(src.Id));
+        var evt = new TestEvent(src.Id, spec);
+        Assert.DoesNotThrow(() =>
+        {
+            queue.Enqueue(evt);
+            queue.ProcessQueue();
+        });
+        Debug.Log("NearestSorter_NoSourceHex_OrderUnchanged passed.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 34. TargetingSpec.AddStep fluent-цепочка работает
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void TargetingSpec_AddStep_FluentChaining()
+    {
+        var s1 = new AllEntitiesPool();
+        var s2 = new TakeSorter(1);
 
         var spec = new TargetingSpec()
-            .AddFilter(filter1)
-            .AddFilter(filter2);
+            .AddStep(s1)
+            .AddStep(s2);
 
-        Assert.AreEqual(2, spec.Filters.Count, "Two filters should be registered.");
-        Assert.AreSame(filter1, spec.Filters[0]);
-        Assert.AreSame(filter2, spec.Filters[1]);
-        Debug.Log("TargetingSpec_AddFilter_FluentChainingWorks passed.");
+        Assert.AreEqual(2, spec.Steps.Count);
+        Assert.AreSame(s1, spec.Steps[0]);
+        Assert.AreSame(s2, spec.Steps[1]);
+        Debug.Log("TargetingSpec_AddStep_FluentChaining passed.");
     }
 }
+
