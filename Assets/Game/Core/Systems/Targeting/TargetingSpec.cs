@@ -1,53 +1,58 @@
+using System.Collections.Generic;
+
+/// <summary>
+/// Спецификация таргетинга — список последовательных шагов пайплайна.
+///
+/// Система таргетинга исполняет шаги по очереди через <see cref="TargetingContext"/>.
+/// Типичная структура одного «блока»:
+///   AllEntitiesPool → FilterStep → SorterStep → TakeSorter → ExitConditionStep
+///
+/// Пайплайн можно повторять произвольно:
+///   Pool → Filter → Sort → Exit → Pool → Filter → Sort → Exit → …
+/// что позволяет реализовать любые условия выбора целей без изменения системы.
+/// </summary>
 public interface ITargetingSpec
 {
-    Geid Id { get; set; }
+    /// <summary>Уникальный ID спецификации (для отладки).</summary>
+    Geid Id { get; }
+
+    /// <summary>Человекочитаемое описание.</summary>
     string Description { get; set; }
-    TargetingType Type { get; set; }
 
-    /// <summary>
-    /// Фильтр для определения допустимых целей.
-    /// </summary>
-    ITargetFilter TargetFilter { get; set; }
-
-    /// <summary>
-    /// Селектор для выбора целей из допустимых.
-    /// </summary>
-    ITargetSelector Selector { get; set; }
-
-    /// <summary>
-    /// Минимальное количество целей (если не наберётся — fizzle).
-    /// </summary>
-    int MinTargets { get; set; }
-
-    /// <summary>
-    /// Максимальное количество целей.
-    /// </summary>
-    int MaxTargets { get; set; }
-
-    /// <summary>
-    /// Роль, под которой выбранные цели добавляются в Subjects.
-    /// </summary>
+    /// <summary>Роль, под которой найденные цели записываются в Subjects события.</summary>
     SubjectRole TargetRole { get; set; }
 
-    /// <summary>
-    /// Сущность-источник для таргетинга (null = без фильтра по источнику).
-    /// </summary>
-    Geid? SourceEntity { get; set; }
+    /// <summary>Шаги пайплайна таргетинга.</summary>
+    IReadOnlyList<ITargetingStep> Steps { get; }
 }
 
-public class BasicTargetingSpec : ITargetingSpec
+/// <summary>
+/// Стандартная реализация <see cref="ITargetingSpec"/>.
+/// Используйте fluent-метод <see cref="AddStep"/> для построения пайплайна.
+/// </summary>
+public class TargetingSpec : ITargetingSpec
 {
-    public Geid Id { get; set; } = Geid.New;
+    private readonly List<ITargetingStep> _steps = new();
+
+    public Geid Id { get; } = Geid.New;
     public string Description { get; set; }
-    public TargetingType Type { get; set; }
-    public ITargetFilter TargetFilter { get; set; }
-    public ITargetSelector Selector { get; set; }
-    public int MinTargets { get; set; } = 1;
-    public int MaxTargets { get; set; } = 1;
     public SubjectRole TargetRole { get; set; } = SubjectRole.Target;
-    public Geid? SourceEntity { get; set; }
+    public IReadOnlyList<ITargetingStep> Steps => _steps;
+
+    /// <summary>
+    /// Добавляет шаг в пайплайн. Возвращает this для fluent-синтаксиса.
+    /// </summary>
+    public TargetingSpec AddStep(ITargetingStep step)
+    {
+        if (step != null)
+            _steps.Add(step);
+        return this;
+    }
 }
 
+/// <summary>
+/// Тип таргетинга (используется в ICardTargeting и для семантической маркировки спеков).
+/// </summary>
 public enum TargetingType
 {
     None,

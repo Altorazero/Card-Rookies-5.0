@@ -1,7 +1,21 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
+/// <summary>
+/// Система таргетинга. Исполняет пайплайн шагов из <see cref="ITargetingSpec"/>
+/// и записывает найденные цели в Subjects события во время фазы TargetResolve.
+///
+/// Зона ответственности:
+///   – последовательно выполнить шаги пайплайна;
+///   – после завершения пайплайна записать кандидатов в Subjects, если они ещё не записаны
+///     и статус события не был изменён.
+///
+/// За пределами ответственности:
+///   – логика сбора кандидатов       → пул-шаги (AllEntitiesPool, ExplicitEntitiesPool, …);
+///   – логика фильтрации             → FilterStep + ITargetFilter (And/Or/Not/…);
+///   – логика сортировки/ограничения → HighestHpSorter, LowestHpSorter, NearestSorter, TakeSorter, …;
+///   – обработка ошибок и альтернативных эффектов → ExitConditionStep + ITargetingAction.
+/// </summary>
 public class TargetingSystem : IEventListener<INeedTargeting, ITargetResolvePhaseEvent>
 {
     public int Priority { get; } = 100;
@@ -11,95 +25,38 @@ public class TargetingSystem : IEventListener<INeedTargeting, ITargetResolvePhas
     {
         if (evt.TargetingSpec == null)
         {
-            Debug.LogWarning($"Event {evt.Id} has no targeting spec. Skipping targeting.");
+            Debug.LogWarning($"[TargetingSystem] Event {evt.Id} has no TargetingSpec. Skipping.");
             return;
         }
 
-        try
-        {
-            ResolveTargeting(context, evt);
-        }
-        catch (TargetSelectionFailed ex)
-        {
-            Debug.LogWarning($"Targeting failed for event {evt.Id}: {ex.Message}");
-            evt.Status = EventStatus.Fizzled;
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogError($"Unexpected error during targeting for event {evt.Id}: {ex}");
-            evt.Status = EventStatus.Fizzled;
-        }
+        ResolveTargeting(context, evt);
     }
 
     private void ResolveTargeting(EventContext context, INeedTargeting evt)
     {
         var spec = evt.TargetingSpec;
+        var pipeline = new TargetingContext(context, evt, spec);
 
-        var candidates = GetCandidates(context, spec);
-        var validCandidates = FilterCandidates(context, candidates, spec);
+        foreach (var step in spec.Steps)
+        {
+            if (pipeline.Stopped) break;
+            step.Execute(pipeline);
+        }
 
-        IReadOnlyList<Geid> selectedTargets;
-        if (spec.Selector != null)
-            selectedTargets = spec.Selector.SelectTarget(context, validCandidates);
-        else
-            selectedTargets = validCandidates.Take(spec.MaxTargets).ToList();
+        // Если пайплайн завершился без явной фиксации целей и событие всё ещё активно —
+        // фиксируем кандидатов как цели.
+        if (!pipeline.AlreadyCommitted && evt.Status == EventStatus.Pending)
+            PopulateTargets(evt, spec, pipeline.Candidates);
+    }
 
-        if (selectedTargets.Count < spec.MinTargets)
-            throw new TargetSelectionFailed(spec.Id, spec.MinTargets, selectedTargets.Count);
-
-        // Добавляем выбранные цели в Subjects по указанной роли
-        evt.EnsureSubjects();
+    private void PopulateTargets(INeedTargeting evt, ITargetingSpec spec, IReadOnlyList<Geid> targets)
+    {
         int roleIdx = (int)spec.TargetRole;
+        evt.EnsureSubjects();
         while (evt.Subjects.Count <= roleIdx)
             evt.Subjects.Add(new List<Geid>());
 
-        foreach (var targetId in selectedTargets)
-            evt.Subjects[roleIdx].Add(targetId);
-    }
-
-    private List<Geid> GetCandidates(EventContext context, ITargetingSpec spec)
-    {
-        var candidates = new List<Geid>();
-
-        switch (spec.Type)
-        {
-            case TargetingType.Entity:
-            case TargetingType.Area:
-            case TargetingType.Direction:
-            case TargetingType.Projectile:
-                candidates.AddRange(context.BattleState.Entities.Keys);
-                break;
-
-            case TargetingType.None:
-            default:
-                break;
-        }
-
-        return candidates;
-    }
-
-    private List<Geid> FilterCandidates(EventContext context, List<Geid> candidates, ITargetingSpec spec)
-    {
-        if (spec.TargetFilter == null)
-            return candidates;
-
-        var validCandidates = new List<Geid>();
-
-        foreach (var candidate in candidates)
-        {
-            context.EvaluatingCandidate = candidate;
-            try
-            {
-                if (spec.TargetFilter.IsTargetValid(candidate, context))
-                    validCandidates.Add(candidate);
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"Error filtering candidate {candidate}: {ex.Message}");
-            }
-        }
-
-        context.EvaluatingCandidate = null;
-        return validCandidates;
+        foreach (var id in targets)
+            evt.Subjects[roleIdx].Add(id);
     }
 }

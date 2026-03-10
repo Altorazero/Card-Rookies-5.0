@@ -13,28 +13,24 @@ public class HealSelfCard : IPlayingCard
     {
         Id = Geid.New;
         
-        // Создаем спецификацию таргетинга для самоисцеления
-        var targetingSpec = new BasicTargetingSpec
-        {
-            Description = "Target self",
-            Type = TargetingType.Entity,
-            TargetFilter = new SelfTargetFilter(),
-            Selector = new FirstTargetSelector(1),
-            MinTargets = 1,
-            MaxTargets = 1,
-            TargetRole = SubjectRole.Target
-        };
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
+        var targetingSpec = new TargetingSpec { Description = "Target self", TargetRole = SubjectRole.Target }
+            .AddStep(new AllEntitiesPool())
+            .AddStep(new FilterStep(new SelfTargetFilter()))
+            .AddStep(new TakeSorter(1))
+            .AddStep(new ExitConditionStep(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
+                onNotMet: new FizzleTargetingAction()));
         
-        // Создаем событие исцеления с таргетингом
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         var healEvent = new HealEventWithTargeting(Id, Id, Geid.Empty, healAmount, targetingSpec);
         
-        // Создаем корневой узел графа карты
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
         CardGraphRootNode = new CardGraphNode(new List<IGameEvent> { healEvent });
         
-        // Добавляем условие: требуется минимум 2 маны
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ: пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ 2 пїЅпїЅпїЅпїЅ
         var manaCondition = new ManaLevelPredicate(ComparisonOperator.GreaterThanOrEqual, 2, Geid.Empty);
         
-        // Можно добавить дополнительные узлы при необходимости
+        // пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         // CardGraphRootNode.TieNode(nextNode, manaCondition);
     }
 }
