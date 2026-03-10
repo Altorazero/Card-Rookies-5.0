@@ -9,7 +9,7 @@ public class RandomDamageSystem : IEventListener<RandomDamageEvent, IApplyPhaseE
         var src = evt.GetFirstSubject(SubjectRole.Source);
         context.Dispatcher.Enqueue(
             new SingleDamageEvent(evt.SystemSourceId, src, tgt,
-                context.BattleState.Rng.NextInt(evt.LowerBond, evt.UpperBond + 1)),
+                context.BattleState.Rng.NextInt(evt.LowerBound, evt.UpperBound + 1)),
             true);
     }
 }

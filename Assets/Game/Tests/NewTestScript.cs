@@ -449,7 +449,7 @@ public class NewTestScript
         queue.Enqueue(mainDmg);
         queue.ProcessQueue();
 
-        // Здоровье должно быть 80 (только mainDmg обработан, barierDmg заблокирован)
+        // Здоровье должно быть 80 (только mainDmg обработан, barrierDmg заблокирован)
         Assert.AreEqual(80, health.CurrentHealth,
             "Expected health=80 since barrier predicate was never satisfied");
         Debug.Log($"BarrierPredicateNotMetTest passed. Health: {health.CurrentHealth}");

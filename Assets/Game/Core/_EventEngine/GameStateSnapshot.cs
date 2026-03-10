@@ -39,7 +39,10 @@ public sealed class GameStateSnapshot
         var compSnapshot = new Dictionary<Type, object>();
         foreach (var kvp in entity.Components)
         {
-            // MemberwiseClone через рефлексию — безопасно, т.к. все компоненты имеют только value-type поля
+            // MemberwiseClone через рефлексию.
+            // ВАЖНО: работает корректно только если все поля компонента являются value-типами
+            // или иммутабельными объектами. Если компонент содержит изменяемые reference-типы,
+            // снимок будет неполным (shallow copy).
             var method = kvp.Value.GetType().GetMethod(
                 "MemberwiseClone",
                 BindingFlags.Instance | BindingFlags.NonPublic);

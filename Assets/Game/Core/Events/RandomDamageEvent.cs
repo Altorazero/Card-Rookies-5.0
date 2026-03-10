@@ -7,15 +7,15 @@ public class RandomDamageEvent : IGameEvent, IHaveSubjects
     public Geid SystemSourceId { get; }
     public List<List<Geid>> Subjects { get; set; }
 
-    public int LowerBond { get; }
-    public int UpperBond { get; }
+    public int LowerBound { get; }
+    public int UpperBound { get; }
 
-    public RandomDamageEvent(Geid systemSourceId, Geid sourceId, Geid targetId, int lowerBond, int upperBond)
+    public RandomDamageEvent(Geid systemSourceId, Geid sourceId, Geid targetId, int lowerBound, int upperBound)
     {
         Id = Geid.New;
         SystemSourceId = systemSourceId;
-        LowerBond = lowerBond;
-        UpperBond = upperBond;
+        LowerBound = lowerBound;
+        UpperBound = upperBound;
         Subjects = SubjectsHelper.Create(
             (SubjectRole.Source, sourceId),
             (SubjectRole.Target, targetId)
