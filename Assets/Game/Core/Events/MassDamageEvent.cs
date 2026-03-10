@@ -12,9 +12,10 @@ public class MassDamageEvent : IGameEvent, IGuardPhaseEvent, IModifyPhaseEvent, 
         set => DamageAmount = value;
     }
     public DamageType DamageType { get; }
-    public List<Subject> SubjectsList { get; set; }
+    public List<List<Geid>> Subjects { get; set; }
 
     public ITargetingSpec TargetingSpec { get; set; }
+
     public MassDamageEvent(Geid systemSourceId, Geid sourceId, Geid targetId, int damageAmount, ITargetingSpec targetingSpec, DamageType damageType = DamageType.Physical)
     {
         Id = Geid.New;
@@ -22,11 +23,10 @@ public class MassDamageEvent : IGameEvent, IGuardPhaseEvent, IModifyPhaseEvent, 
         DamageAmount = damageAmount;
         DamageType = damageType;
         TargetingSpec = targetingSpec;
-        SubjectsList = new List<Subject>
-        {
-            new Subject { Entity = targetId, Role = SubjectRole.Target },
-            new Subject { Entity = sourceId, Role = SubjectRole.Source }
-        };
+        Subjects = SubjectsHelper.Create(
+            (SubjectRole.Source, sourceId),
+            (SubjectRole.Target, targetId)
+        );
     }
 }
 

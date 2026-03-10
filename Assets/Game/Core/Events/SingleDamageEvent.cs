@@ -12,17 +12,17 @@ public class SingleDamageEvent : IGameEvent, IGuardPhaseEvent, IModifyPhaseEvent
         set => DamageAmount = value;
     }
     public DamageType DamageType { get; }
-    public List<Subject> SubjectsList { get; set; }
+    public List<List<Geid>> Subjects { get; set; }
+
     public SingleDamageEvent(Geid systemSourceId, Geid sourceId, Geid targetId, int damageAmount, DamageType damageType = DamageType.Physical)
     {
         Id = Geid.New;
         SystemSourceId = systemSourceId;
         DamageAmount = damageAmount;
         DamageType = damageType;
-        SubjectsList = new List<Subject>
-        {
-            new Subject { Entity = targetId, Role = SubjectRole.Target },
-            new Subject { Entity = sourceId, Role = SubjectRole.Source }
-        };
+        Subjects = SubjectsHelper.Create(
+            (SubjectRole.Source, sourceId),
+            (SubjectRole.Target, targetId)
+        );
     }
 }

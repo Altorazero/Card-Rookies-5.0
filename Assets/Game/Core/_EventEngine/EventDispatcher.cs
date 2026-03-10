@@ -2,12 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-// Generic listener signature (общие поля)
+// Generic listener signature
 public interface IBaseEventListener
 {
-    public Geid SystemId { get; }
+    Geid SystemId { get; }
     int Priority { get; }
 }
+
 public interface IEventListener<TEvent, TPhase> : IBaseEventListener
     where TEvent : IGameEvent
     where TPhase : IPhaseEvent
@@ -15,20 +16,27 @@ public interface IEventListener<TEvent, TPhase> : IBaseEventListener
     void OnEvent(EventContext context, TEvent evt);
 }
 
-// Новый вид слушателя для SBA-фазы
+// РЎРїРµС†РёР°Р»СЊРЅС‹Р№ СЃР»СѓС€Р°С‚РµР»СЊ РґР»СЏ SBA-С„Р°Р·С‹
 public interface ISBAListener : IBaseEventListener
 {
     void OnSBA(EventContext context);
 }
 
-
-public class EventDispatcher
+/// <summary>
+/// РћС‡РµСЂРµРґСЊ СЃРѕР±С‹С‚РёР№ СЃ РїРѕРґРґРµСЂР¶РєРѕР№:
+/// - С„Р°Р·РѕРІРѕР№ РѕР±СЂР°Р±РѕС‚РєРё (Guard в†’ Replace в†’ Modify в†’ TargetResolve в†’ Apply в†’ After в†’ SBA)
+/// - Р±Р°СЂСЊРµСЂРЅРѕР№ РѕС‡РµСЂРµРґРё СЃ РїСЂРµРґРёРєР°С‚Р°РјРё-Р±Р»РѕРєР°РјРё
+/// - СЃРЅРёРјРєРѕРІ СЃРѕСЃС‚РѕСЏРЅРёСЏ GameState РїРµСЂРµРґ РѕР±СЂР°Р±РѕС‚РєРѕР№ РІРЅРµС€РЅРёС… СЃРѕР±С‹С‚РёР№
+/// </summary>
+public class EventQueue
 {
-    // очередь основных действий
-    private readonly LinkedList<IGameEvent> _mainQueue = new();
-    private readonly List<IGameEvent> _barrierQueue = new();
+    // РћСЃРЅРѕРІРЅР°СЏ РѕС‡РµСЂРµРґСЊ: (СЃРѕР±С‹С‚РёРµ, РЅСѓР¶РµРЅ Р»Рё СЃРЅРёРјРѕРє РїРµСЂРµРґ РѕР±СЂР°Р±РѕС‚РєРѕР№)
+    private readonly LinkedList<(IGameEvent Event, bool NeedsSnapshot)> _mainQueue = new();
 
-    // хранилище слушателей (listener, eventType, phaseType, invoker, priority)
+    // Р‘Р°СЂСЊРµСЂРЅР°СЏ РѕС‡РµСЂРµРґСЊ: (СЃРѕР±С‹С‚РёРµ, РїСЂРµРґРёРєР°С‚-Р±Р»РѕРє, Р±С‹Р»Рѕ Р»Рё РґРѕР±Р°РІР»РµРЅРѕ РёР·РІРЅРµ)
+    private readonly List<(IGameEvent Event, IPredicate Predicate, bool IsExternal)> _barrierQueue = new();
+
+    // Р—Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅРЅС‹Рµ СЃР»СѓС€Р°С‚РµР»Рё
     private readonly List<(
         object listener,
         Type eventType,
@@ -37,9 +45,16 @@ public class EventDispatcher
         int priority
     )> _listeners = new();
 
-/*    public TargetingInterpreter TargetingInterpreter { get; set; }
-*/    public  BattleState BattleState;
-    private static readonly Type[] PhaseOrder = new Type[]
+    public BattleState BattleState;
+
+    /// <summary>
+    /// РСЃС‚РѕСЂРёСЏ СЃРЅРёРјРєРѕРІ СЃРѕСЃС‚РѕСЏРЅРёСЏ (СЃРѕР·РґР°С‘С‚СЃСЏ РїРµСЂРµРґ РєР°Р¶РґС‹Рј РІРЅРµС€РЅРёРј СЃРѕР±С‹С‚РёРµРј).
+    /// </summary>
+    public List<GameStateSnapshot> StateHistory { get; } = new();
+
+    private bool _isProcessing;
+
+    private static readonly Type[] PhaseOrder =
     {
         typeof(IGuardPhaseEvent),
         typeof(IReplacePhaseEvent),
@@ -50,12 +65,12 @@ public class EventDispatcher
         typeof(ISBAEvent),
     };
 
-    public EventDispatcher(BattleState state)
+    public EventQueue(BattleState state)
     {
         BattleState = state;
     }
 
-    // Универсальный метод подписки - автоматически находит все интерфейсы слушателей
+    // РЈРЅРёРІРµСЂСЃР°Р»СЊРЅР°СЏ РїРѕРґРїРёСЃРєР° СЃРёСЃС‚РµРјС‹ вЂ” СЂРµРіРёСЃС‚СЂРёСЂСѓРµС‚ РІСЃРµ СЂРµР°Р»РёР·РѕРІР°РЅРЅС‹Рµ IEventListener<,>
     public void Subscribe(IBaseEventListener system)
     {
         if (system == null) return;
@@ -63,17 +78,13 @@ public class EventDispatcher
         var systemType = system.GetType();
         var interfaces = systemType.GetInterfaces();
 
-        // Проверяем ISBAListener
         if (system is ISBAListener sbaListener)
-        {
             SubscribeSBAListener(sbaListener);
-        }
 
-        // Проверяем все generic IEventListener<TEvent, TPhase>
         foreach (var iface in interfaces)
         {
             if (!iface.IsGenericType) continue;
-            
+
             var genericDef = iface.GetGenericTypeDefinition();
             if (genericDef != typeof(IEventListener<,>)) continue;
 
@@ -81,36 +92,25 @@ public class EventDispatcher
             var eventType = typeArgs[0];
             var phaseType = typeArgs[1];
 
-            // Проверяем, что не дублируем подписку
-            if (_listeners.Any(e => ReferenceEquals(e.listener, system) && 
-                                   e.eventType == eventType && 
-                                   e.phaseType == phaseType))
+            if (_listeners.Any(e => ReferenceEquals(e.listener, system) &&
+                                    e.eventType == eventType &&
+                                    e.phaseType == phaseType))
                 continue;
 
-            // Создаём invoker через рефлексию
             var method = iface.GetMethod("OnEvent");
             Action<EventContext> invoker = ctx =>
             {
-                // Проверяем тип события - событие уже правильного типа, просто передаём его
                 if (eventType.IsInstanceOfType(ctx.Event))
-                {
                     method.Invoke(system, new object[] { ctx, ctx.Event });
-                }
             };
 
-            _listeners.Add((
-                system,
-                eventType,
-                phaseType,
-                invoker,
-                system.Priority
-            ));
+            _listeners.Add((system, eventType, phaseType, invoker, system.Priority));
         }
 
         _listeners.Sort((a, b) => a.priority.CompareTo(b.priority));
     }
 
-    // Подписка для generic-слушателей (оставлена для обратной совместимости)
+    // РЇРІРЅР°СЏ РїРѕРґРїРёСЃРєР° generic-СЃР»СѓС€Р°С‚РµР»СЏ
     public void Subscribe<TEvent, TPhase>(IEventListener<TEvent, TPhase> listener)
         where TEvent : IGameEvent
         where TPhase : IPhaseEvent
@@ -124,58 +124,60 @@ public class EventDispatcher
                 listener.OnEvent(ctx, evt);
         };
 
-        _listeners.Add((
-            listener,
-            typeof(TEvent),
-            typeof(TPhase),
-            invoker,
-            listener.Priority
-        ));
-
+        _listeners.Add((listener, typeof(TEvent), typeof(TPhase), invoker, listener.Priority));
         _listeners.Sort((a, b) => a.priority.CompareTo(b.priority));
     }
 
-    // Подписка для SBA-слушателей (внутренний метод)
     private void SubscribeSBAListener(ISBAListener listener)
     {
         if (_listeners.Any(e => ReferenceEquals(e.listener, listener) && e.phaseType == typeof(ISBAEvent)))
             return;
 
-        Action<EventContext> invoker = ctx =>
-        {
-            listener.OnSBA(ctx);
-        };
+        Action<EventContext> invoker = ctx => listener.OnSBA(ctx);
 
-        _listeners.Add((
-            listener,
-            typeof(IGameEvent),
-            typeof(ISBAEvent),
-            invoker,
-            listener.Priority
-        ));
+        _listeners.Add((listener, typeof(IGameEvent), typeof(ISBAEvent), invoker, listener.Priority));
     }
 
-
-    // Enqueue — добавление в очередь (atFront опционально)
+    /// <summary>
+    /// Р”РѕР±Р°РІРёС‚СЊ СЃРѕР±С‹С‚РёРµ РІ РѕС‡РµСЂРµРґСЊ. Р•СЃР»Рё РІС‹Р·С‹РІР°РµС‚СЃСЏ РІРЅРµ РѕР±СЂР°Р±РѕС‚РєРё вЂ” РїРѕРјРµС‡Р°РµС‚СЃСЏ РєР°Рє РІРЅРµС€РЅРµРµ
+    /// (РїРµСЂРµРґ РµРіРѕ РѕР±СЂР°Р±РѕС‚РєРѕР№ Р±СѓРґРµС‚ СЃРѕС…СЂР°РЅС‘РЅ СЃРЅРёРјРѕРє СЃРѕСЃС‚РѕСЏРЅРёСЏ).
+    /// </summary>
     public void Enqueue(IGameEvent action, bool atFront = false)
     {
+        bool isExternal = !_isProcessing;
         if (atFront)
-            _mainQueue.AddFirst(action);
+            _mainQueue.AddFirst((action, isExternal));
         else
-            _mainQueue.AddLast(action);
+            _mainQueue.AddLast((action, isExternal));
     }
 
-    public void EnqueueWithBarrier(IGameEvent action)
+    /// <summary>
+    /// Р”РѕР±Р°РІРёС‚СЊ СЃРѕР±С‹С‚РёРµ РІ Р±Р°СЂСЊРµСЂРЅСѓСЋ РѕС‡РµСЂРµРґСЊ СЃ РЅРµРѕР±СЏР·Р°С‚РµР»СЊРЅС‹Рј РїСЂРµРґРёРєР°С‚РѕРј-Р±Р»РѕРєРѕРј.
+    /// РЎРѕР±С‹С‚РёРµ Р±СѓРґРµС‚ РїРµСЂРµРјРµС‰РµРЅРѕ РІ РѕСЃРЅРѕРІРЅСѓСЋ РѕС‡РµСЂРµРґСЊ С‚РѕР»СЊРєРѕ РєРѕРіРґР° РїСЂРµРґРёРєР°С‚ СЃС‚Р°РЅРµС‚ РёСЃС‚РёРЅРЅС‹Рј
+    /// (РїСЂРѕРІРµСЂРєР° РїСЂРѕРёСЃС…РѕРґРёС‚ РїСЂРё РѕРїСѓСЃС‚РµРЅРёРё РѕСЃРЅРѕРІРЅРѕР№ РѕС‡РµСЂРµРґРё).
+    /// </summary>
+    public void EnqueueWithBarrier(IGameEvent action, IPredicate predicate = null)
     {
-        _barrierQueue.Add(action);
+        bool isExternal = !_isProcessing;
+        _barrierQueue.Add((action, predicate, isExternal));
     }
 
+    /// <summary>
+    /// РћР±СЂР°Р±РѕС‚Р°С‚СЊ РІСЃРµ СЃРѕР±С‹С‚РёСЏ РІ РѕСЃРЅРѕРІРЅРѕР№ РѕС‡РµСЂРµРґРё.
+    /// </summary>
     public void ProcessQueue()
     {
+        if (_isProcessing) return;
+
+        _isProcessing = true;
+
         while (_mainQueue.Count > 0)
         {
-            var action = _mainQueue.First.Value;
+            var (action, needsSnapshot) = _mainQueue.First.Value;
             _mainQueue.RemoveFirst();
+
+            if (needsSnapshot)
+                StateHistory.Add(new GameStateSnapshot(BattleState));
 
             foreach (var phase in PhaseOrder)
             {
@@ -183,17 +185,16 @@ public class EventDispatcher
                     break;
 
                 var context = new EventContext(BattleState, action, this);
+                context.CurrentPhase = phase;
 
                 foreach (var entry in _listeners)
                 {
                     if (action.Status == EventStatus.Cancelled)
                         break;
 
-                    // фильтрация по фазе
                     if (!entry.phaseType.IsAssignableFrom(phase))
                         continue;
 
-                    // фильтрация по типу события
                     if (!entry.eventType.IsInstanceOfType(action))
                         continue;
 
@@ -202,31 +203,34 @@ public class EventDispatcher
             }
         }
 
+        _isProcessing = false;
         ProcessBarrierQueue();
     }
 
-
     private void ProcessBarrierQueue()
     {
+        bool anyReleased = false;
+
         for (int i = _barrierQueue.Count - 1; i >= 0; i--)
         {
-            var action = _barrierQueue[i];
-            if (CheckBarrierResolved(action))
+            var (action, predicate, isExternal) = _barrierQueue[i];
+            if (CheckBarrierResolved(action, predicate))
             {
                 _barrierQueue.RemoveAt(i);
-                Enqueue(action);
+                // РЎРѕС…СЂР°РЅСЏРµРј С„Р»Р°Рі isExternal РїСЂРё РїРµСЂРµРјРµС‰РµРЅРёРё РІ РѕСЃРЅРѕРІРЅСѓСЋ РѕС‡РµСЂРµРґСЊ
+                _mainQueue.AddLast((action, isExternal));
+                anyReleased = true;
             }
         }
 
-        if (_mainQueue.Count > 0)
-        {
+        if (anyReleased && _mainQueue.Count > 0)
             ProcessQueue();
-        }
     }
 
-    private bool CheckBarrierResolved(IGameEvent gameEvent)
+    private bool CheckBarrierResolved(IGameEvent gameEvent, IPredicate predicate)
     {
-        // TODO: логика проверки barrier-ов
-        return true;
+        if (predicate == null) return true;
+        var context = new EventContext(BattleState, gameEvent, this);
+        return predicate.Evaluate(context);
     }
 }

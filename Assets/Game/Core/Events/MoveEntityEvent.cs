@@ -6,16 +6,16 @@ public class MoveEntityEvent : IGameEvent, IHaveSubjects
     public EventStatus Status { get; set; }
     public Geid Id { get; }
     public Geid SystemSourceId { get; }
-    public List<Subject> SubjectsList { get; set; }
-    public MoveEntityEvent(Geid systemsourceId, Geid targetId, HexCoordinates newPosition)
+    public List<List<Geid>> Subjects { get; set; }
+
+    public MoveEntityEvent(Geid systemSourceId, Geid targetId, HexCoordinates newPosition)
     {
         Id = Geid.New;
         Status = EventStatus.Pending;
-        SystemSourceId = systemsourceId;
+        SystemSourceId = systemSourceId;
         NewPosition = newPosition;
-        SubjectsList = new List<Subject>
-        {
-            new Subject { Entity = targetId, Role = SubjectRole.Target }
-        };
+        Subjects = SubjectsHelper.Create(
+            (SubjectRole.Target, targetId)
+        );
     }
 }

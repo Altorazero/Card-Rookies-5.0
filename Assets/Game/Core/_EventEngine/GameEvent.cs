@@ -1,33 +1,31 @@
 using System.Collections.Generic;
-using UnityEngine;
 
 public enum EventStatus
 {
-    Pending,     // в очереди, ещё не обрабатывалось
-    Cancelled,   // запрещено до применения
-    Replaced,    // заменено другим действием
-    Fizzled,     // не смогло примениться (нет целей и т.п.)
-    Applied      // успешно применено
+    Pending,     // Р’ РѕС‡РµСЂРµРґРё, РµС‰С‘ РЅРµ РѕР±СЂР°Р±Р°С‚С‹РІР°Р»РѕСЃСЊ
+    Cancelled,   // РћС‚РјРµРЅРµРЅРѕ РґРѕ РїСЂРёРјРµРЅРµРЅРёСЏ
+    Replaced,    // Р—Р°РјРµРЅРµРЅРѕ РґСЂСѓРіРёРј СЃРѕР±С‹С‚РёРµРј
+    Fizzled,     // РќРµ РЅР°С€Р»Рѕ С†РµР»Рё Рё С‚.Рї.
+    Applied      // РЈСЃРїРµС€РЅРѕ РїСЂРёРјРµРЅРµРЅРѕ
 }
 
 public interface IGameEvent
 {
     /// <summary>
-    /// Статус события. 
-    /// Pending - в очереди, ещё не обрабатывалось
+    /// РЎС‚Р°С‚СѓСЃ СЃРѕР±С‹С‚РёСЏ.
+    /// Pending - РІ РѕС‡РµСЂРµРґРё, РµС‰С‘ РЅРµ РѕР±СЂР°Р±Р°С‚С‹РІР°Р»РѕСЃСЊ
     /// </summary>
     EventStatus Status { get; set; }
 
     /// <summary>
-    /// Айди самого Event.
+    /// РЈРЅРёРєР°Р»СЊРЅС‹Р№ ID Event.
     /// </summary>
     Geid Id { get; }
+
     /// <summary>
-    /// Id нечта, вызвавшего появление этого Event. Нужно для системы, чтобы избегать циклов!
+    /// Id СЃРёСЃС‚РµРјС‹, РїРѕСЂРѕРґРёРІС€РµР№ РґР°РЅРЅС‹Р№ Event. РќСѓР¶РЅРѕ РґР»СЏ РѕС‚Р»Р°РґРєРё, С‡С‚РѕР±С‹ РїРѕРЅСЏС‚СЊ РѕС‚РєСѓРґР°!
     /// </summary>
     Geid SystemSourceId { get; }
-
-
 }
 
 public class GameEvent : IGameEvent
@@ -42,11 +40,10 @@ public class GameEvent : IGameEvent
     }
 }
 
-// Интерфейс для обобщения фаз событий
+// РРЅС‚РµСЂС„РµР№СЃ РґР»СЏ РїРѕРјРµС‰РµРЅРёСЏ С„Р°Р· СЃРѕР±С‹С‚РёР№
 public interface IPhaseEvent : IGameEvent { }
-// Фазы обработки событий 
+// Р¤Р°Р·С‹ РѕР±СЂР°Р±РѕС‚РєРё СЃРѕР±С‹С‚РёСЏ
 public interface IGuardPhaseEvent : IPhaseEvent { }
-//public interface IValidatePhaseEvent : IGameEvent { }
 public interface IReplacePhaseEvent : IPhaseEvent { }
 public interface IModifyPhaseEvent : IPhaseEvent { }
 public interface ITargetResolvePhaseEvent : IPhaseEvent { }
@@ -54,34 +51,28 @@ public interface IApplyPhaseEvent : IPhaseEvent { }
 public interface IAfterPhaseEvent : IPhaseEvent { }
 public interface ISBAEvent : IPhaseEvent { }
 
-
-
+/// <summary>
+/// Р РѕР»Рё СЃСѓР±СЉРµРєС‚РѕРІ РІ СЃРѕР±С‹С‚РёРё. РџРѕСЂСЏРґРѕРє enum-Р·РЅР°С‡РµРЅРёР№ РѕРїСЂРµРґРµР»СЏРµС‚ РёРЅРґРµРєСЃС‹ РІ Subjects.
+/// Source = 0, Target = 1, Owner = 2, Auxiliary = 3, PrimaryTarget = 4, SecondaryTarget = 5
+/// </summary>
 public enum SubjectRole
 {
-    Source,
-    Target,
-    Owner,
-    Auxiliary, // вспомогательный участник события, не основной
-    PrimaryTarget, // главная цель события
-    SecondaryTarget,
+    Source = 0,
+    Target = 1,
+    Owner = 2,
+    Auxiliary = 3,
+    PrimaryTarget = 4,
+    SecondaryTarget = 5,
+}
 
-}
-public sealed class Subject
-{
-    /// <summary>
-    /// Айди сущности-участника события.
-    /// </summary>
-    public Geid Entity { get; set; }
-    /// <summary>
-    /// Роль участника в событии.
-    /// </summary>
-    public SubjectRole Role { get; set; }
-}
+/// <summary>
+/// РРЅС‚РµСЂС„РµР№СЃ РґР»СЏ СЃРѕР±С‹С‚РёР№ СЃ СѓС‡Р°СЃС‚РёРµРј СЃСѓС‰РЅРѕСЃС‚РµР№.
+/// Subjects вЂ” СЃРїРёСЃРѕРє СЃРїРёСЃРєРѕРІ Geid, РіРґРµ РёРЅРґРµРєСЃ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ Р·РЅР°С‡РµРЅРёСЋ SubjectRole:
+///   Subjects[(int)SubjectRole.Source]  вЂ” РёСЃС‚РѕС‡РЅРёРєРё
+///   Subjects[(int)SubjectRole.Target]  вЂ” С†РµР»Рё
+///   Рё С‚.Рґ.
+/// </summary>
 public interface IHaveSubjects : IGameEvent
 {
-    /// <summary>
-    /// Список участников события с их ролями.
-    /// </summary>
-    public List<Subject> SubjectsList { get; set; }
-
+    List<List<Geid>> Subjects { get; set; }
 }

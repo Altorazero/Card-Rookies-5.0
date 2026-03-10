@@ -1,22 +1,17 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
-using UnityEngine.UIElements;
-using static UnityEngine.GraphicsBuffer;
 
 public class HealthSystem :
     IEventListener<HealEvent, IModifyPhaseEvent>,
     IEventListener<SingleDamageEvent, IApplyPhaseEvent>,
     ISBAListener
-
 {
     public Geid SystemId { get; } = Geid.New;
-
     public int Priority { get; } = 100;
+
     void IEventListener<SingleDamageEvent, IApplyPhaseEvent>.OnEvent(EventContext context, SingleDamageEvent evt)
     {
-        var tgt = evt.SubjectsList.SingleOrDefault(t => t.Role == SubjectRole.Target).Entity;
-        var src = evt.SubjectsList.SingleOrDefault(t => t.Role == SubjectRole.Source).Entity;
+        var tgt = evt.GetFirstSubject(SubjectRole.Target);
         var targetEntity = context.BattleState.GetEntity(tgt);
         if (targetEntity != null)
         {
@@ -35,8 +30,7 @@ public class HealthSystem :
 
     void IEventListener<HealEvent, IModifyPhaseEvent>.OnEvent(EventContext context, HealEvent evt)
     {
-        var tgt = evt.SubjectsList.SingleOrDefault(t => t.Role == SubjectRole.Target).Entity;
-        var src = evt.SubjectsList.SingleOrDefault(t => t.Role == SubjectRole.Source).Entity;
+        var tgt = evt.GetFirstSubject(SubjectRole.Target);
         var targetEntity = context.BattleState.GetEntity(tgt);
         if (targetEntity != null)
         {
@@ -53,13 +47,11 @@ public class HealthSystem :
         }
     }
 
-    // Новый SBA-слушатель (вызов из диспетчера в фазе ISBAEvent)
     void ISBAListener.OnSBA(EventContext context)
     {
         var aliveEntities = context.BattleState.Entities.Values;
         var toRemove = new List<Geid>();
 
-        // Собираем идентификаторы сущностей для удаления вне цикла перечисления
         foreach (var entity in aliveEntities)
         {
             var healthComp = entity.GetComponent<HealthComponent>();
@@ -70,10 +62,7 @@ public class HealthSystem :
             }
         }
 
-        // Удаляем вне перечисления коллекции, чтобы избежать InvalidOperationException
         foreach (var id in toRemove)
-        {
             context.BattleState.RemoveEntity(id);
-        }
     }
 }
