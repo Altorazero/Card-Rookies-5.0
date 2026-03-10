@@ -13,28 +13,27 @@ public class HealSelfCard : IPlayingCard
     {
         Id = Geid.New;
         
-        // Создаем спецификацию таргетинга для самоисцеления
-        var targetingSpec = new BasicTargetingSpec
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
+        var targetingSpec = new TargetingSpec
         {
             Description = "Target self",
             Type = TargetingType.Entity,
-            TargetFilter = new SelfTargetFilter(),
-            Selector = new FirstTargetSelector(1),
+            Priority = TargetPriority.First,
             MinTargets = 1,
             MaxTargets = 1,
             TargetRole = SubjectRole.Target
-        };
+        }.AddFilter(new SelfTargetFilter());
         
-        // Создаем событие исцеления с таргетингом
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         var healEvent = new HealEventWithTargeting(Id, Id, Geid.Empty, healAmount, targetingSpec);
         
-        // Создаем корневой узел графа карты
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
         CardGraphRootNode = new CardGraphNode(new List<IGameEvent> { healEvent });
         
-        // Добавляем условие: требуется минимум 2 маны
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ: пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ 2 пїЅпїЅпїЅпїЅ
         var manaCondition = new ManaLevelPredicate(ComparisonOperator.GreaterThanOrEqual, 2, Geid.Empty);
         
-        // Можно добавить дополнительные узлы при необходимости
+        // пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         // CardGraphRootNode.TieNode(nextNode, manaCondition);
     }
 }

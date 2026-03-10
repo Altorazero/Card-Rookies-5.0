@@ -13,16 +13,15 @@ public class NewTestScript
         Debug.Log("Event id: " + @event.Id);
         Debug.Log("Event source id: " + @event.SystemSourceId);
 
-        var targetingSpec = new BasicTargetingSpec
+        var targetingSpec = new TargetingSpec
         {
             Description = "Single target damage",
             Type = TargetingType.Entity,
-            TargetFilter = new AlwaysValidFilter(),
-            Selector = new FirstTargetSelector(1),
+            Priority = TargetPriority.First,
             MinTargets = 1,
             MaxTargets = 1,
             TargetRole = SubjectRole.Target
-        };
+        }.AddFilter(new AlwaysValidFilter());
 
         MassDamageEvent damageEvent = new(Geid.New, Geid.New, Geid.New, 10, targetingSpec);
         Debug.Log("DamageEvent id: " + damageEvent.Id);
@@ -60,17 +59,16 @@ public class NewTestScript
         var sourcePower = new PowerComponent(50);
         sourceEntity.AddComponent(sourcePower);
 
-        var singleTargetSpec = new BasicTargetingSpec
+        var singleTargetSpec = new TargetingSpec
         {
             Description = "Single target",
             Type = TargetingType.Entity,
-            TargetFilter = new AlwaysValidFilter(),
-            Selector = new FirstTargetSelector(1),
+            Priority = TargetPriority.First,
             MinTargets = 1,
             MaxTargets = 1,
             TargetRole = SubjectRole.Target,
             SourceEntity = sourceEntity.Id
-        };
+        }.AddFilter(new AlwaysValidFilter());
 
         SingleDamageEvent damageEvent = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 80);
         SingleDamageEvent damageEvent1 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 30);
@@ -119,17 +117,16 @@ public class NewTestScript
         var sourceVamp = new VampComponent(0.5f);
         sourceEntity.AddComponent(sourceVamp);
 
-        var massTargetSpec = new BasicTargetingSpec
+        var massTargetSpec = new TargetingSpec
         {
             Description = "Mass damage - single target",
             Type = TargetingType.Entity,
-            TargetFilter = new AlwaysValidFilter(),
-            Selector = new FirstTargetSelector(1),
+            Priority = TargetPriority.First,
             MinTargets = 1,
             MaxTargets = 1,
             TargetRole = SubjectRole.Target,
             SourceEntity = sourceEntity.Id
-        };
+        }.AddFilter(new AlwaysValidFilter());
 
         MassDamageEvent damageEvent = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 80, massTargetSpec);
         MassDamageEvent damageEvent1 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 30, massTargetSpec);
@@ -187,41 +184,38 @@ public class NewTestScript
         var targetHex = new HexComponent(new HexCoordinates(1, 0));
         targetEntity.AddComponent(targetHex);
 
-        var damageTargetSpec = new BasicTargetingSpec
+        var damageTargetSpec = new TargetingSpec
         {
             Description = "Damage target",
             Type = TargetingType.Entity,
-            TargetFilter = new AlwaysValidFilter(),
-            Selector = new FirstTargetSelector(1),
+            Priority = TargetPriority.First,
             MinTargets = 1,
             MaxTargets = 1,
             TargetRole = SubjectRole.Target,
             SourceEntity = sourceEntity.Id
-        };
+        }.AddFilter(new AlwaysValidFilter());
 
-        var healTargetSpec = new BasicTargetingSpec
+        var healTargetSpec = new TargetingSpec
         {
             Description = "Heal target",
             Type = TargetingType.Entity,
-            TargetFilter = new AlwaysValidFilter(),
-            Selector = new FirstTargetSelector(1),
+            Priority = TargetPriority.First,
             MinTargets = 1,
             MaxTargets = 1,
             TargetRole = SubjectRole.Target,
             SourceEntity = sourceEntity.Id
-        };
+        }.AddFilter(new AlwaysValidFilter());
 
-        var selfHealSpec = new BasicTargetingSpec
+        var selfHealSpec = new TargetingSpec
         {
             Description = "Self heal",
             Type = TargetingType.Entity,
-            TargetFilter = new SelfTargetFilter(),
-            Selector = new FirstTargetSelector(1),
+            Priority = TargetPriority.First,
             MinTargets = 1,
             MaxTargets = 1,
             TargetRole = SubjectRole.Target,
             SourceEntity = sourceEntity.Id
-        };
+        }.AddFilter(new SelfTargetFilter());
 
         MassDamageEvent damageEvent = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 18, damageTargetSpec);
         MassDamageEvent damageEvent1 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 30, damageTargetSpec);
@@ -328,17 +322,16 @@ public class NewTestScript
 
         var healthFilter = new HealthThresholdFilter(20);
 
-        var targetingSpec = new BasicTargetingSpec
+        var targetingSpec = new TargetingSpec
         {
             Description = "Target low health entities",
             Type = TargetingType.Entity,
-            TargetFilter = healthFilter,
-            Selector = new AllTargetsSelector(),
+            Priority = TargetPriority.First,
             MinTargets = 0,
-            MaxTargets = 10,
+            MaxTargets = TargetCount.All,
             TargetRole = SubjectRole.Target,
             SourceEntity = source.Id
-        };
+        }.AddFilter(healthFilter);
 
         var damageEvent = new MassDamageEvent(source.Id, source.Id, Geid.Empty, 10, targetingSpec);
 
