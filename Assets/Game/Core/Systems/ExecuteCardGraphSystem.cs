@@ -1,10 +1,15 @@
 using System;
 using System.Collections.Generic;
-using UnityEditor.Search;
 using UnityEngine;
 
 public class ExecuteCardGraphSystem : IEventListener<ExecuteCardGraphEvent, IApplyPhaseEvent>
 {
+    /// <summary>
+    /// Максимальное количество посещений узлов за одно выполнение карты.
+    /// Защита от бесконечных циклов в цикличных графах.
+    /// </summary>
+    private const int MaxNodeVisits = 1000;
+
     public int Priority { get; } = 10;
     public Geid SystemId { get; } = Geid.New;
 
@@ -17,37 +22,36 @@ public class ExecuteCardGraphSystem : IEventListener<ExecuteCardGraphEvent, IApp
             evt.Status = EventStatus.Fizzled;
             return;
         }
-        // Execute the card graph node and all reachable nodes whose transition conditions are met
         try
         {
-            // �������� ���� �� ������� � ������������ Enqueue/Dequeue ��� ������ � ������
-            var visited = new HashSet<Geid>();
+            // Обход графа — может быть цикличным. Защита через MaxNodeVisits.
+            int totalVisits = 0;
             var queue = new Queue<CardGraphNode>();
-
             queue.Enqueue(cardGraphNode);
-            visited.Add(cardGraphNode.Id);
 
             while (queue.Count > 0)
             {
-                var node = queue.Dequeue();
+                if (totalVisits >= MaxNodeVisits)
+                {
+                    Debug.LogWarning($"[ExecuteCardGraphSystem] Reached max node visits ({MaxNodeVisits}) for event {evt.Id}. Stopping graph traversal.");
+                    break;
+                }
 
-                // Execute all actions stored in this node
+                var node = queue.Dequeue();
+                totalVisits++;
+
+                // Выполняем все действия, хранящиеся в этом узле
                 foreach (var action in node.Events)
                 {
                     context.Dispatcher.Enqueue(action);
                 }
 
-                // For each tied node check the transition condition; if met, schedule execution
+                // Для каждого связанного узла проверяем условие перехода
                 foreach (var (targetNode, condition) in node.TiedNodes)
                 {
                     var conditionMet = condition == null || condition.Evaluate(context);
-                    if (!conditionMet) continue;
-
-                    if (!visited.Contains(targetNode.Id))
-                    {
-                        visited.Add(targetNode.Id);
+                    if (conditionMet)
                         queue.Enqueue(targetNode);
-                    }
                 }
             }
 
