@@ -42,7 +42,7 @@ public class MetricLevelPredicate<TMetric> : IPredicate where TMetric : MetricCo
     }
 }
 
-// Удобный wrapper для совместимости/удобства создания предикатов для здоровья
+// пїЅпїЅпїЅпїЅпїЅпїЅпїЅ wrapper пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ/пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 public class HealthLevelPredicate : MetricLevelPredicate<HealthComponent>
 {
     public HealthLevelPredicate(ComparisonOperator comparisonOperator, int threshold, Geid subject)
@@ -53,6 +53,14 @@ public class HealthLevelPredicate : MetricLevelPredicate<HealthComponent>
 public class ManaLevelPredicate : MetricLevelPredicate<ManaComponent>
 {
     public ManaLevelPredicate(ComparisonOperator comparisonOperator, int threshold, Geid subject)
+        : base(comparisonOperator, threshold, subject)
+    {
+    }
+}
+
+public class EnergyLevelPredicate : MetricLevelPredicate<EnergyComponent>
+{
+    public EnergyLevelPredicate(ComparisonOperator comparisonOperator, int threshold, Geid subject)
         : base(comparisonOperator, threshold, subject)
     {
     }

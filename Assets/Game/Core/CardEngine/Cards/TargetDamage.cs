@@ -5,15 +5,17 @@ public class HealSelfCard : IPlayingCard
     public Geid Id { get; private set; } = Geid.New;
     public string Name { get; private set; } = "Heal Self";
     public string Description { get; private set; } = "Heals the player for a specified amount.";
-    // public CardType Type { get; private set; }
-    // public int ManaCost { get; private set; }
+    public int ManaCost { get; private set; }
+    public int EnergyCost { get; private set; }
     public CardGraphNode CardGraphRootNode { get; private set; }
     
-    public HealSelfCard(int healAmount)
+    public HealSelfCard(int healAmount, int manaCost = 2)
     {
         Id = Geid.New;
+        ManaCost = manaCost;
+        EnergyCost = 0;
         
-        // ������� ������������ ���������� ��� �������������
+        // Создаём спецификацию таргетинга для самоисцеления
         var targetingSpec = new TargetingSpec { Description = "Target self", TargetRole = SubjectRole.Target }
             .AddStep(new AllEntitiesPool())
             .AddStep(new FilterStep(new SelfTargetFilter()))
@@ -21,16 +23,10 @@ public class HealSelfCard : IPlayingCard
             .AddStep(new ExitConditionStep(new CandidateCountPredicate(ComparisonOperator.GreaterThanOrEqual, 1),
                 onNotMet: new FizzleTargetingAction()));
         
-        // ������� ������� ��������� � �����������
+        // Создаём событие исцеления с таргетингом
         var healEvent = new HealEventWithTargeting(Id, Id, Geid.Empty, healAmount, targetingSpec);
         
-        // ������� �������� ���� ����� �����
+        // Создаём корневой узел графа карты
         CardGraphRootNode = new CardGraphNode(new List<IGameEvent> { healEvent });
-        
-        // ��������� �������: ��������� ������� 2 ����
-        var manaCondition = new ManaLevelPredicate(ComparisonOperator.GreaterThanOrEqual, 2, Geid.Empty);
-        
-        // ����� �������� �������������� ���� ��� �������������
-        // CardGraphRootNode.TieNode(nextNode, manaCondition);
     }
 }
