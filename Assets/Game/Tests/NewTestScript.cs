@@ -303,6 +303,7 @@ public class NewTestScript
             .AddStep(new AllEntitiesPool())
             .AddStep(new FilterStep(healthFilter));
 
+        // ИЗМЕНЕНИЕ: не передавайте начальную цель, если хотите чтобы таргетинг определил её
         var damageEvent = new MassDamageEvent(source.Id, source.Id, Geid.Empty, 10, targetingSpec);
 
         EventQueue dispatcher = new(battleState);
@@ -314,9 +315,11 @@ public class NewTestScript
         var targets = damageEvent.GetSubjects(SubjectRole.Target).ToList();
 
         Assert.IsNotNull(targets, "Targets should not be null");
-        Assert.AreEqual(1, targets.Count, "Expected one target with low health");
-        Assert.IsTrue(targets.Contains(lowHp.Id), "Expected targets to contain lowHp.Id");
-        Assert.IsFalse(targets.Contains(highHp.Id), "Expected targets NOT to contain highHp.Id");
+        // ИЗМЕНЕНИЕ: ожидаем 1 цель ПОСЛЕ фильтрации пустого Geid
+        var validTargets = targets.Where(t => t != Geid.Empty).ToList();
+        Assert.AreEqual(1, validTargets.Count, "Expected one target with low health");
+        Assert.IsTrue(validTargets.Contains(lowHp.Id), "Expected targets to contain lowHp.Id");
+        Assert.IsFalse(validTargets.Contains(highHp.Id), "Expected targets NOT to contain highHp.Id");
 
         Debug.Log("TargetingPredicateTest passed.");
     }

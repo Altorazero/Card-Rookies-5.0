@@ -25,6 +25,10 @@ public class HexConeShape : IHexShape
     {
         if (point.Equals(origin)) return false;
 
+        // Проверяем, что точка в пределах максимального радиуса от origin
+        int distanceFromOrigin = HexCoordinates.Distance(origin, point);
+        if (distanceFromOrigin > MaxRadius) return false;
+
         for (int depth = 1; depth <= MaxRadius; depth++)
         {
             var axisHex = new HexCoordinates(
