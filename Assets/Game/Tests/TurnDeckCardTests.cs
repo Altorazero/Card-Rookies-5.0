@@ -1032,7 +1032,7 @@ public class TurnDeckCardTests
         ally3.GetComponent<HealthComponent>().CurrentHealth = 90;
 
         // Start with heal 1 - first ally heals 1, next would be 0 (< 1), so chain stops
-        var loopState = new HealingLightningLoopState(caster.Id, caster.Id, 1, new System.Collections.Generic.List<Geid>());
+        var loopState = new HealingLightningLoopState(caster.Id, caster.Id, 1, new List<Geid>());
         var lightningEvent = new LoopEvent(caster.Id, loopState);
         queue.Enqueue(lightningEvent);
         queue.ProcessQueue();

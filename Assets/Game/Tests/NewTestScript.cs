@@ -202,7 +202,7 @@ public class NewTestScript
         var predicate2 = new HealthLevelPredicate(ComparisonOperator.LessThan, 900, sourceEntity.Id);
 
         // BranchingEvent: если мана >= 30 → heal + damageEvent1 + damageEvent2; если здоровье < 900 → heal self
-        var healBranch = new BranchingEvent(sourceEntity.Id, new System.Collections.Generic.List<BranchEntry>
+        var healBranch = new BranchingEvent(sourceEntity.Id, new List<BranchEntry>
         {
             new BranchEntry(null, new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 50, healTargetSpec)),
             new BranchEntry(null, damageEvent1),
@@ -210,7 +210,7 @@ public class NewTestScript
         });
         var selfHealBranch = new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, sourceEntity.Id, 30, selfHealSpec);
 
-        var branchingEvent = new BranchingEvent(sourceEntity.Id, new System.Collections.Generic.List<BranchEntry>
+        var branchingEvent = new BranchingEvent(sourceEntity.Id, new List<BranchEntry>
         {
             new BranchEntry(null, damageEvent),
             new BranchEntry(predicate, healBranch),
