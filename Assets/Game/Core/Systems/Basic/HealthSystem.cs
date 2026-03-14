@@ -37,7 +37,7 @@ public class HealthSystem :
             var healthComp = targetEntity.GetComponent<HealthComponent>();
             if (healthComp != null)
             {
-                healthComp.CurrentHealth += evt.HealAmount;
+                healthComp.CurrentHealth = System.Math.Min(healthComp.CurrentHealth + evt.HealAmount, healthComp.MaxHealth);
                 Debug.Log($"Entity {targetEntity.Id} healed for {evt.HealAmount}. Current health: {healthComp.CurrentHealth}");
             }
             else

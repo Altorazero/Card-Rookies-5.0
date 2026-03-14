@@ -5,7 +5,7 @@ using System.Collections.Generic;
 /// В выбранном направлении появляется стена огня, наносящая 3 урона всем противникам
 /// по прямой и накладывающая на них эффект горения.
 /// Стоимость: 4 маны и 1 энергии.
-/// - Ресурсов нет — cancelled.
+/// - Ресурсов нет — SpendResourcesEvent отменяется.
 /// - Наличие противников в зоне не важно: способность применяется всегда.
 /// </summary>
 public class FireWallCard : IPlayingCard
@@ -15,7 +15,7 @@ public class FireWallCard : IPlayingCard
     public string Description => "Наносит 3 урона всем противникам по прямой и поджигает их. Стоимость: 4 маны, 1 энергии.";
     public int ManaCost => 4;
     public int EnergyCost => 1;
-    public CardGraphNode CardGraphRootNode { get; }
+    public IReadOnlyList<IGameEvent> Effects { get; }
 
     /// <param name="casterEntityId">Кастующая сущность.</param>
     /// <param name="direction">Направление стены огня (единичный гексовый вектор).</param>
@@ -23,7 +23,6 @@ public class FireWallCard : IPlayingCard
     /// <param name="burnTicks">Количество тиков горения (по умолчанию 3).</param>
     public FireWallCard(Geid casterEntityId, HexCoordinates direction, int wallLength = 5, int burnTicks = 3)
     {
-        // Таргетинг на противников по прямой (без ExitCondition на «нет целей» — применяется всегда)
         var lineSpec = new TargetingSpec
             {
                 Description = "Enemies in fire wall line",
@@ -32,12 +31,7 @@ public class FireWallCard : IPlayingCard
             .AddStep(new AllEntitiesPool())
             .AddStep(new FilterStep(new EnemyTeamFilter()))
             .AddStep(new FilterStep(new HexShapeFilter(casterEntityId, new HexLineShape(direction, wallLength))));
-        // Нет ExitCondition с Fizzle — способность применяется независимо от наличия целей
 
-        var spendEvent = new SpendResourcesEvent(casterEntityId, casterEntityId, ManaCost, EnergyCost);
-        var damageEvent = new MassDamageEvent(casterEntityId, casterEntityId, Geid.Empty, 3, lineSpec, DamageType.Magical);
-
-        // Поджигаем всех противников в зоне через отдельный таргетинг (те же цели, что и урон)
         var burnLineSpec = new TargetingSpec
             {
                 Description = "Burn enemies in fire wall line",
@@ -47,17 +41,10 @@ public class FireWallCard : IPlayingCard
             .AddStep(new FilterStep(new EnemyTeamFilter()))
             .AddStep(new FilterStep(new HexShapeFilter(casterEntityId, new HexLineShape(direction, wallLength))));
 
+        var spendEvent = new SpendResourcesEvent(casterEntityId, casterEntityId, ManaCost, EnergyCost);
+        var damageEvent = new MassDamageEvent(casterEntityId, casterEntityId, Geid.Empty, 3, lineSpec, DamageType.Magical);
         var burnMassEvent = new FireWallBurnEvent(casterEntityId, casterEntityId, burnLineSpec, 3, burnTicks);
 
-        var effectNode = new CardGraphNode(new List<IGameEvent> { spendEvent, damageEvent, burnMassEvent });
-        var rootNode = new CardGraphNode(new List<IGameEvent>());
-
-        var hasResources = CompositePredicates.And(
-            new ManaLevelPredicate(ComparisonOperator.GreaterThanOrEqual, ManaCost, casterEntityId),
-            new EnergyLevelPredicate(ComparisonOperator.GreaterThanOrEqual, EnergyCost, casterEntityId)
-        );
-        rootNode.TieNode(effectNode, hasResources);
-
-        CardGraphRootNode = rootNode;
+        Effects = new List<IGameEvent> { spendEvent, damageEvent, burnMassEvent };
     }
 }
