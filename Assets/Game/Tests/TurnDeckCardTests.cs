@@ -20,11 +20,13 @@ public class TurnDeckCardTests
         queue.Subscribe(new HealthSystem());
         queue.Subscribe(new ResourceCostSystem());
         queue.Subscribe(new BurnSystem());
-        queue.Subscribe(new HealingLightningSystem());
+        queue.Subscribe(new LoopSystem());
+        queue.Subscribe(new BranchingSystem());
         queue.Subscribe(new RicochetSwordSystem());
         queue.Subscribe(new FireWallBurnSystem());
         queue.Subscribe(new AutoDrawSystem());
-        queue.Subscribe(new ExecuteCardGraphSystem());
+        queue.Subscribe(new PlayCardEventSystem());
+        queue.Subscribe(new PlayCardCheckSystem());
         return (state, queue);
     }
 
@@ -250,8 +252,8 @@ public class TurnDeckCardTests
     public void DeckComponent_AddToTop_CardIsFirst()
     {
         var deck = new DeckComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
 
         deck.AddToBottom(card1);
         deck.AddToTop(card2);
@@ -265,8 +267,8 @@ public class TurnDeckCardTests
     public void DeckComponent_AddToBottom_CardIsLast()
     {
         var deck = new DeckComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
 
         deck.AddToTop(card1);
         deck.AddToBottom(card2);
@@ -279,9 +281,9 @@ public class TurnDeckCardTests
     public void DeckComponent_AddAt_CardAtCorrectPosition()
     {
         var deck = new DeckComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card3 = new BasicPlayingCard("C", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
+        var card3 = new BasicPlayingCard("C", "desc", 0, 0);
 
         deck.AddToBottom(card1);
         deck.AddToBottom(card3);
@@ -297,8 +299,8 @@ public class TurnDeckCardTests
     public void DeckComponent_DrawTop_ReturnsFirstCard()
     {
         var deck = new DeckComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
 
         deck.AddToBottom(card1);
         deck.AddToBottom(card2);
@@ -313,8 +315,8 @@ public class TurnDeckCardTests
     public void DeckComponent_DrawBottom_ReturnsLastCard()
     {
         var deck = new DeckComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
 
         deck.AddToBottom(card1);
         deck.AddToBottom(card2);
@@ -329,9 +331,9 @@ public class TurnDeckCardTests
     public void DeckComponent_DrawSpecific_FindsByIdAndRemoves()
     {
         var deck = new DeckComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card3 = new BasicPlayingCard("C", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
+        var card3 = new BasicPlayingCard("C", "desc", 0, 0);
 
         deck.AddToBottom(card1);
         deck.AddToBottom(card2);
@@ -352,7 +354,7 @@ public class TurnDeckCardTests
         var cards = new List<IPlayingCard>();
         for (int i = 0; i < 5; i++)
         {
-            var c = new BasicPlayingCard($"Card{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+            var c = new BasicPlayingCard($"Card{i}", "desc", 0, 0);
             cards.Add(c);
             deck.AddToBottom(c);
         }
@@ -378,8 +380,8 @@ public class TurnDeckCardTests
     {
         var cards = new List<IPlayingCard>
         {
-            new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())),
-            new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()))
+            new BasicPlayingCard("A", "desc", 0, 0),
+            new BasicPlayingCard("B", "desc", 0, 0)
         };
         var deck = new DeckComponent(cards);
         Assert.AreEqual(2, deck.Count);
@@ -392,7 +394,7 @@ public class TurnDeckCardTests
         var state = new BattleState(123);
         var cards = new List<IPlayingCard>();
         for (int i = 0; i < 10; i++)
-            cards.Add(new BasicPlayingCard($"Card{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+            cards.Add(new BasicPlayingCard($"Card{i}", "desc", 0, 0));
 
         var deck = new DeckComponent(cards);
         var originalOrder = new List<IPlayingCard>(deck.Cards);
@@ -412,9 +414,9 @@ public class TurnDeckCardTests
     public void DeckComponent_MoveCard_ReordersCards()
     {
         var deck = new DeckComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card3 = new BasicPlayingCard("C", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
+        var card3 = new BasicPlayingCard("C", "desc", 0, 0);
 
         deck.AddToBottom(card1);
         deck.AddToBottom(card2);
@@ -433,7 +435,7 @@ public class TurnDeckCardTests
     {
         var deck = new DeckComponent();
         var discard = new DiscardComponent();
-        var card = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card = new BasicPlayingCard("A", "desc", 0, 0);
         deck.AddToBottom(card);
 
         deck.DiscardCard(card, discard);
@@ -448,7 +450,7 @@ public class TurnDeckCardTests
     public void DeckComponent_DestroyCard_RemovesFromDeck()
     {
         var deck = new DeckComponent();
-        var card = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card = new BasicPlayingCard("A", "desc", 0, 0);
         deck.AddToBottom(card);
 
         var result = deck.DestroyCard(card);
@@ -464,7 +466,7 @@ public class TurnDeckCardTests
     public void HandComponent_DrawFromDeck_TransfersCard()
     {
         var deck = new DeckComponent();
-        var card = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card = new BasicPlayingCard("A", "desc", 0, 0);
         deck.AddToBottom(card);
 
         var hand = new HandComponent(deck);
@@ -493,7 +495,7 @@ public class TurnDeckCardTests
     {
         var deck = new DeckComponent();
         for (int i = 0; i < 5; i++)
-            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0));
 
         var hand = new HandComponent(deck);
         hand.DrawMultiple(3);
@@ -508,7 +510,7 @@ public class TurnDeckCardTests
     {
         var deck = new DeckComponent();
         for (int i = 0; i < 5; i++)
-            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0));
 
         var hand = new HandComponent(deck) { AutoDrawCount = 2 };
         hand.AutoDraw();
@@ -522,7 +524,7 @@ public class TurnDeckCardTests
     public void HandComponent_PlayCard_RemovesFromHand()
     {
         var deck = new DeckComponent();
-        var card = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card = new BasicPlayingCard("A", "desc", 0, 0);
         deck.AddToBottom(card);
 
         var hand = new HandComponent(deck);
@@ -539,7 +541,7 @@ public class TurnDeckCardTests
     {
         var deck = new DeckComponent();
         var discard = new DiscardComponent();
-        var card = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card = new BasicPlayingCard("A", "desc", 0, 0);
         deck.AddToBottom(card);
 
         var hand = new HandComponent(deck);
@@ -558,7 +560,7 @@ public class TurnDeckCardTests
         var discard = new DiscardComponent();
 
         for (int i = 0; i < 3; i++)
-            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0));
 
         var hand = new HandComponent(deck);
         hand.DrawMultiple(3);
@@ -574,7 +576,7 @@ public class TurnDeckCardTests
     public void HandComponent_ExileCard_RemovesForever()
     {
         var deck = new DeckComponent();
-        var card = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card = new BasicPlayingCard("A", "desc", 0, 0);
         deck.AddToBottom(card);
 
         var hand = new HandComponent(deck);
@@ -590,8 +592,8 @@ public class TurnDeckCardTests
     public void HandComponent_MoveCard_ReordersInHand()
     {
         var deck = new DeckComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
         deck.AddToBottom(card1);
         deck.AddToBottom(card2);
 
@@ -633,7 +635,7 @@ public class TurnDeckCardTests
         var discard = new DiscardComponent();
 
         for (int i = 0; i < 3; i++)
-            discard.AddToTop(new BasicPlayingCard($"Card{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+            discard.AddToTop(new BasicPlayingCard($"Card{i}", "desc", 0, 0));
 
         discard.ShuffleIntoDeck(deck, state.Rng);
 
@@ -646,7 +648,7 @@ public class TurnDeckCardTests
     public void DiscardComponent_TakeCard_FindsAndRemoves()
     {
         var discard = new DiscardComponent();
-        var card = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card = new BasicPlayingCard("A", "desc", 0, 0);
         discard.AddToTop(card);
 
         var taken = discard.TakeCard(card.Id);
@@ -659,8 +661,8 @@ public class TurnDeckCardTests
     public void DiscardComponent_TakeTop_ReturnsTopCard()
     {
         var discard = new DiscardComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
 
         discard.AddToBottom(card1);
         discard.AddToBottom(card2);
@@ -682,7 +684,7 @@ public class TurnDeckCardTests
         var entity = AddEntity(state, teamA);
         var deck = new DeckComponent();
         for (int i = 0; i < 5; i++)
-            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0));
         var hand = new HandComponent(deck) { AutoDrawCount = 3 };
         entity.AddComponent(hand);
         entity.AddComponent(deck);
@@ -705,7 +707,7 @@ public class TurnDeckCardTests
         var entity = AddEntity(state, teamA);
         var deck = new DeckComponent();
         for (int i = 0; i < 5; i++)
-            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0));
         var hand = new HandComponent(deck) { AutoDrawCount = 1, HasDrawnInitial = false };
         entity.AddComponent(hand);
         entity.AddComponent(deck);
@@ -729,7 +731,7 @@ public class TurnDeckCardTests
         var entity = AddEntity(state, teamA);
         var deck = new DeckComponent();
         for (int i = 0; i < 5; i++)
-            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0));
         var hand = new HandComponent(deck) { AutoDrawCount = 2, HasDrawnInitial = true };
         entity.AddComponent(hand);
         entity.AddComponent(deck);
@@ -756,8 +758,8 @@ public class TurnDeckCardTests
         var deckB = new DeckComponent();
         for (int i = 0; i < 3; i++)
         {
-            deckA.AddToBottom(new BasicPlayingCard($"A{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
-            deckB.AddToBottom(new BasicPlayingCard($"B{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+            deckA.AddToBottom(new BasicPlayingCard($"A{i}", "desc", 0, 0));
+            deckB.AddToBottom(new BasicPlayingCard($"B{i}", "desc", 0, 0));
         }
         var handA = new HandComponent(deckA) { AutoDrawCount = 1, HasDrawnInitial = true };
         var handB = new HandComponent(deckB) { AutoDrawCount = 1, HasDrawnInitial = true };
@@ -847,8 +849,8 @@ public class TurnDeckCardTests
         var enemy = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0);
 
         var card = new FireballCard(caster.Id);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         var enemyHp = enemy.GetComponent<HealthComponent>().CurrentHealth;
@@ -869,8 +871,8 @@ public class TurnDeckCardTests
         var enemy = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0);
 
         var card = new FireballCard(caster.Id);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var checkEvent = new PlayCardCheckEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(checkEvent);
         queue.ProcessQueue();
 
         var enemyHp = enemy.GetComponent<HealthComponent>().CurrentHealth;
@@ -888,8 +890,8 @@ public class TurnDeckCardTests
         // No enemies
 
         var card = new FireballCard(caster.Id);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         var casterHp = caster.GetComponent<HealthComponent>().CurrentHealth;
@@ -913,8 +915,8 @@ public class TurnDeckCardTests
         var enemyFar = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0, hex: new HexCoordinates(0, 3)); // Not in cone
 
         var card = new KnifeThrowCard(caster.Id, direction);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(97, enemy1.GetComponent<HealthComponent>().CurrentHealth, "Enemy1 in cone should take 3 damage.");
@@ -936,8 +938,8 @@ public class TurnDeckCardTests
         var enemy = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0, hex: new HexCoordinates(0, 3));
 
         var card = new KnifeThrowCard(caster.Id, direction);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(100, enemy.GetComponent<HealthComponent>().CurrentHealth, "Enemy not in cone should NOT take damage.");
@@ -956,8 +958,8 @@ public class TurnDeckCardTests
         var enemy = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0, hex: new HexCoordinates(1, 0));
 
         var card = new KnifeThrowCard(caster.Id, direction);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var checkEvent = new PlayCardCheckEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(checkEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(100, enemy.GetComponent<HealthComponent>().CurrentHealth, "Enemy should NOT take damage when card is cancelled.");
@@ -976,8 +978,8 @@ public class TurnDeckCardTests
         caster.GetComponent<HealthComponent>().CurrentHealth = 80;
 
         var card = new HealingLightningCard(caster.Id, caster.Id);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(84, caster.GetComponent<HealthComponent>().CurrentHealth, "Caster should be healed for 4 HP.");
@@ -999,8 +1001,8 @@ public class TurnDeckCardTests
         ally2.GetComponent<HealthComponent>().CurrentHealth = 70;
 
         var card = new HealingLightningCard(caster.Id, caster.Id);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         int casterHp = caster.GetComponent<HealthComponent>().CurrentHealth;
@@ -1030,7 +1032,8 @@ public class TurnDeckCardTests
         ally3.GetComponent<HealthComponent>().CurrentHealth = 90;
 
         // Start with heal 1 - first ally heals 1, next would be 0 (< 1), so chain stops
-        var lightningEvent = new HealingLightningEvent(caster.Id, caster.Id, caster.Id, 1);
+        var loopState = new HealingLightningLoopState(caster.Id, caster.Id, 1, new List<Geid>());
+        var lightningEvent = new LoopEvent(caster.Id, loopState);
         queue.Enqueue(lightningEvent);
         queue.ProcessQueue();
 
@@ -1050,8 +1053,8 @@ public class TurnDeckCardTests
         caster.GetComponent<HealthComponent>().CurrentHealth = 98; // Near max
 
         var card = new HealingLightningCard(caster.Id, caster.Id);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(100, caster.GetComponent<HealthComponent>().CurrentHealth, "HP should not exceed max.");
@@ -1071,8 +1074,8 @@ public class TurnDeckCardTests
         var enemy = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0, hex: new HexCoordinates(1, 0));
 
         var card = new RicochetSwordCard(caster.Id, enemy.Id);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(96, enemy.GetComponent<HealthComponent>().CurrentHealth, "Enemy should take 4 damage.");
@@ -1093,8 +1096,8 @@ public class TurnDeckCardTests
         var enemy2 = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0, hex: new HexCoordinates(4, 0)); // Within ricochet range (dist 2 from enemy1)
 
         var card = new RicochetSwordCard(caster.Id, enemy1.Id);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(96, enemy1.GetComponent<HealthComponent>().CurrentHealth, "Enemy1 should take 4 damage.");
@@ -1113,8 +1116,8 @@ public class TurnDeckCardTests
         var enemy = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0, hex: new HexCoordinates(1, 0));
 
         var card = new RicochetSwordCard(caster.Id, enemy.Id);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var checkEvent = new PlayCardCheckEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(checkEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(100, enemy.GetComponent<HealthComponent>().CurrentHealth, "Enemy should NOT take damage when card is cancelled.");
@@ -1135,8 +1138,8 @@ public class TurnDeckCardTests
         var enemy3 = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0, hex: new HexCoordinates(6, 0)); // Would be 2nd ricochet, but no resources
 
         var card = new RicochetSwordCard(caster.Id, enemy1.Id);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         // enemy1 should take damage (initial strike)
@@ -1164,8 +1167,8 @@ public class TurnDeckCardTests
         var enemyOff = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0, hex: new HexCoordinates(1, 2)); // Off-line
 
         var card = new FireWallCard(caster.Id, direction);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(97, enemy1.GetComponent<HealthComponent>().CurrentHealth, "Enemy1 in line should take 3 damage.");
@@ -1186,8 +1189,8 @@ public class TurnDeckCardTests
         var enemy = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0, hex: new HexCoordinates(1, 0));
 
         var card = new FireWallCard(caster.Id, direction);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         var burn = enemy.GetComponent<BurnComponent>();
@@ -1208,8 +1211,8 @@ public class TurnDeckCardTests
         var enemy = AddEntity(state, teamB, hp: 100, mana: 0, energy: 0, hex: new HexCoordinates(1, 0));
 
         var card = new FireWallCard(caster.Id, direction);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var checkEvent = new PlayCardCheckEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(checkEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(100, enemy.GetComponent<HealthComponent>().CurrentHealth, "Enemy should NOT take damage when card is cancelled.");
@@ -1228,8 +1231,8 @@ public class TurnDeckCardTests
         // No enemies
 
         var card = new FireWallCard(caster.Id, direction);
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         // Card should apply (spend resources) even with no enemies
@@ -1303,7 +1306,7 @@ public class TurnDeckCardTests
     public void CardStorageBase_Contains_FindsByCardId()
     {
         var deck = new DeckComponent();
-        var card = new BasicPlayingCard("Test", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card = new BasicPlayingCard("Test", "desc", 0, 0);
         deck.AddToBottom(card);
 
         Assert.IsTrue(deck.Contains(card.Id));
@@ -1315,8 +1318,8 @@ public class TurnDeckCardTests
     public void CardStorageBase_IndexOf_ReturnsCorrectIndex()
     {
         var deck = new DeckComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
         deck.AddToBottom(card1);
         deck.AddToBottom(card2);
 
@@ -1331,7 +1334,7 @@ public class TurnDeckCardTests
     {
         var deck = new DeckComponent();
         for (int i = 0; i < 5; i++)
-            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+            deck.AddToBottom(new BasicPlayingCard($"Card{i}", "desc", 0, 0));
 
         deck.Clear();
         Assert.AreEqual(0, deck.Count);
@@ -1343,8 +1346,8 @@ public class TurnDeckCardTests
     public void CardStorageBase_RemoveById_RemovesCorrectCard()
     {
         var deck = new DeckComponent();
-        var card1 = new BasicPlayingCard("A", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
-        var card2 = new BasicPlayingCard("B", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>()));
+        var card1 = new BasicPlayingCard("A", "desc", 0, 0);
+        var card2 = new BasicPlayingCard("B", "desc", 0, 0);
         deck.AddToBottom(card1);
         deck.AddToBottom(card2);
 
@@ -1369,7 +1372,7 @@ public class TurnDeckCardTests
         var deck = new DeckComponent();
         var card = new FireballCard(caster.Id);
         deck.AddToBottom(card);
-        deck.AddToBottom(new BasicPlayingCard("Extra", "desc", 0, 0, new CardGraphNode(new List<IGameEvent>())));
+        deck.AddToBottom(new BasicPlayingCard("Extra", "desc", 0, 0));
 
         var hand = new HandComponent(deck) { AutoDrawCount = 1 };
         caster.AddComponent(hand);
@@ -1395,8 +1398,8 @@ public class TurnDeckCardTests
         var playedCard = hand.PlayCard(card);
         Assert.IsNotNull(playedCard, "Fireball should be playable from hand.");
 
-        var graphEvent = new ExecuteCardGraphEvent(caster.Id, card.CardGraphRootNode);
-        queue.Enqueue(graphEvent);
+        var playEvent = new PlayCardEvent(caster.Id, card, caster.Id);
+        queue.Enqueue(playEvent);
         queue.ProcessQueue();
 
         Assert.AreEqual(94, enemy.GetComponent<HealthComponent>().CurrentHealth, "Enemy should take 6 damage from Fireball.");

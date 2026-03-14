@@ -1,6 +1,8 @@
+using System.Collections.Generic;
+
 /// <summary>
 /// Базовый интерфейс игровой карты.
-/// Карта содержит название, описание, стоимость ресурсов и корневой узел графа событий.
+/// Карта содержит название, описание, стоимость ресурсов и список порождаемых событий.
 /// </summary>
 public interface IPlayingCard
 {
@@ -11,7 +13,8 @@ public interface IPlayingCard
     int ManaCost { get; }
     /// <summary>Стоимость энергии для разыгрывания карты.</summary>
     int EnergyCost { get; }
-    CardGraphNode CardGraphRootNode { get; }
+    /// <summary>Список событий, порождаемых картой при разыгрывании.</summary>
+    IReadOnlyList<IGameEvent> Effects { get; }
 }
 
 /// <summary>
@@ -24,21 +27,21 @@ public class BasicPlayingCard : IPlayingCard
     public string Description { get; private set; }
     public int ManaCost { get; private set; }
     public int EnergyCost { get; private set; }
-    public CardGraphNode CardGraphRootNode { get; private set; }
+    public IReadOnlyList<IGameEvent> Effects { get; private set; }
 
-    public BasicPlayingCard(string name, string description, int manaCost, int energyCost, CardGraphNode cardGraphRootNode)
+    public BasicPlayingCard(string name, string description, int manaCost, int energyCost, IReadOnlyList<IGameEvent> effects = null)
     {
         Id = Geid.New;
         Name = name;
         Description = description;
         ManaCost = manaCost;
         EnergyCost = energyCost;
-        CardGraphRootNode = cardGraphRootNode;
+        Effects = effects ?? new List<IGameEvent>();
     }
 
     /// <summary>Создаёт карту без стоимости ресурсов.</summary>
-    public BasicPlayingCard(string name, string description, CardGraphNode cardGraphRootNode)
-        : this(name, description, 0, 0, cardGraphRootNode)
+    public BasicPlayingCard(string name, string description, IReadOnlyList<IGameEvent> effects = null)
+        : this(name, description, 0, 0, effects)
     {
     }
 }

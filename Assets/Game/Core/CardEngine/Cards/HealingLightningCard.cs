@@ -6,6 +6,9 @@ using System.Collections.Generic;
 /// в радиусе 2 клеток с уполовиненным лечением (округление вниз). Цепь продолжается
 /// пока лечение >= 1.
 /// Нет стоимости (бесплатная), выбор цели — конкретный союзник.
+/// Реализована через <see cref="LoopEvent"/> + <see cref="HealingLightningLoopState"/>:
+/// каждый шаг порождает <see cref="HealEvent"/>, проходящий через систему событий
+/// и триггерящий все реакции (щиты, вампиризм и т.д.).
 /// </summary>
 public class HealingLightningCard : IPlayingCard
 {
@@ -14,15 +17,14 @@ public class HealingLightningCard : IPlayingCard
     public string Description => "Исцеляет союзника на 4 хп, молния переходит к ближайшему союзнику (радиус 2, лечение делится на 2).";
     public int ManaCost => 0;
     public int EnergyCost => 0;
-    public CardGraphNode CardGraphRootNode { get; }
+    public IReadOnlyList<IGameEvent> Effects { get; }
 
     /// <param name="casterEntityId">Кастующая сущность.</param>
     /// <param name="initialTargetId">Первичная цель (союзник, которому будет применено лечение).</param>
     public HealingLightningCard(Geid casterEntityId, Geid initialTargetId)
     {
-        // Событие первого исцеления (цепь обрабатывается HealingLightningSystem)
-        var lightningEvent = new HealingLightningEvent(casterEntityId, casterEntityId, initialTargetId, 4);
-
-        CardGraphRootNode = new CardGraphNode(new List<IGameEvent> { lightningEvent });
+        var loopState = new HealingLightningLoopState(casterEntityId, initialTargetId, 4, new List<Geid>());
+        var loopEvent = new LoopEvent(casterEntityId, loopState);
+        Effects = new List<IGameEvent> { loopEvent };
     }
 }

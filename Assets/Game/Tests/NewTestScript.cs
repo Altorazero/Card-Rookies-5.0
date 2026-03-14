@@ -136,13 +136,13 @@ public class NewTestScript
     }
 
     [Test]
-    public void CardGraphTest()
+    public void BranchingEventTest()
     {
         DamageSystem damageSystem = new();
         HealthSystem healthSystem = new();
         VampSystem vampSystem = new();
         ShieldSystem shieldSystem = new();
-        ExecuteCardGraphSystem cardGraphSystem = new();
+        BranchingSystem branchingSystem = new();
         TargetingSystem targetingSystem = new();
         BattleState battleState = new BattleState(12);
 
@@ -152,7 +152,7 @@ public class NewTestScript
         dispatcher.Subscribe(shieldSystem);
         dispatcher.Subscribe(healthSystem);
         dispatcher.Subscribe(vampSystem);
-        dispatcher.Subscribe(cardGraphSystem);
+        dispatcher.Subscribe(branchingSystem);
 
         var sourceEntity = new BaseEntity();
         Debug.Log("Source entity id: " + sourceEntity.Id);
@@ -198,23 +198,28 @@ public class NewTestScript
         MassDamageEvent damageEvent1 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 30, damageTargetSpec);
         MassDamageEvent damageEvent2 = new(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 20, damageTargetSpec);
 
-        var node1 = new CardGraphNode(new List<IGameEvent> { damageEvent });
-        var node2 = new CardGraphNode(new List<IGameEvent> { new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 50, healTargetSpec), damageEvent1, damageEvent2 });
-        var node3 = new CardGraphNode(new List<IGameEvent> { new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, sourceEntity.Id, 30, selfHealSpec) });
-        var node4 = new CardGraphNode(new List<IGameEvent> { new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, sourceEntity.Id, 20, selfHealSpec) });
-
         var predicate = new ManaLevelPredicate(ComparisonOperator.GreaterThanOrEqual, 30, sourceEntity.Id);
         var predicate2 = new HealthLevelPredicate(ComparisonOperator.LessThan, 900, sourceEntity.Id);
 
-        node1.TieNode(node2, predicate);
-        node1.TieNode(node3, predicate2);
-        node3.TieNode(node1, predicate2);
-        node3.TieNode(node4, predicate2);
+        // BranchingEvent: если мана >= 30 → heal + damageEvent1 + damageEvent2; если здоровье < 900 → heal self
+        var healBranch = new BranchingEvent(sourceEntity.Id, new List<BranchEntry>
+        {
+            new BranchEntry(null, new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, targetEntity.Id, 50, healTargetSpec)),
+            new BranchEntry(null, damageEvent1),
+            new BranchEntry(null, damageEvent2)
+        });
+        var selfHealBranch = new HealEventWithTargeting(sourceEntity.Id, sourceEntity.Id, sourceEntity.Id, 30, selfHealSpec);
 
-        var playCardEvent = new ExecuteCardGraphEvent(sourceEntity.Id, node1);
-        dispatcher.Enqueue(playCardEvent);
+        var branchingEvent = new BranchingEvent(sourceEntity.Id, new List<BranchEntry>
+        {
+            new BranchEntry(null, damageEvent),
+            new BranchEntry(predicate, healBranch),
+            new BranchEntry(predicate2, selfHealBranch)
+        });
+
+        dispatcher.Enqueue(branchingEvent);
         dispatcher.ProcessQueue();
-        Debug.Log("Processed PlayCardEvent id: " + playCardEvent.Id);
+        Debug.Log("Processed BranchingEvent id: " + branchingEvent.Id);
         Debug.Log("Source entity coordinates after card play: " + sourceEntity.GetComponent<HexComponent>()?.Coordinates.ToString());
     }
 
@@ -225,7 +230,6 @@ public class NewTestScript
         HealthSystem healthSystem = new();
         VampSystem vampSystem = new();
         ShieldSystem shieldSystem = new();
-        ExecuteCardGraphSystem cardGraphSystem = new();
         MoveSystem moveSystem = new();
         RandomMovementSystem randomMovementSystem = new();
         RandomDamageSystem randomDamageSystem = new();
@@ -240,7 +244,6 @@ public class NewTestScript
         dispatcher.Subscribe(shieldSystem);
         dispatcher.Subscribe(healthSystem);
         dispatcher.Subscribe(vampSystem);
-        dispatcher.Subscribe(cardGraphSystem);
         dispatcher.Subscribe(moveSystem);
         dispatcher.Subscribe(randomMovementSystem);
         dispatcher.Subscribe(randomDamageSystem);
