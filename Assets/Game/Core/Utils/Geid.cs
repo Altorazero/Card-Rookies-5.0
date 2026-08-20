@@ -1,42 +1,42 @@
 using System;
 using System.Threading;
 
-public readonly struct Geid : IEquatable<Geid>, IComparable<Geid>
+public readonly struct GEID : IEquatable<GEID>, IComparable<GEID>
 {
     private static int _currentId;
 
     public int Value { get; }
 
-    private Geid(int value)
+    private GEID(int value)
     {
         Value = value;
     }
 
     // Генератор нового ID
-    public static Geid New => new Geid(Interlocked.Increment(ref _currentId));
+    public static GEID New => new GEID(Interlocked.Increment(ref _currentId));
 
-    public static Geid Empty { get; } = new Geid(0);
+    public static GEID Empty { get; } = new GEID(0);
 
     /// <summary>
-    /// Создаёт Geid из конкретного значения (используется при клонировании).
+    /// Создаёт GEID из конкретного значения (используется при клонировании).
     /// </summary>
-    public static Geid FromValue(int value) => new Geid(value);
+    public static GEID FromValue(int value) => new GEID(value);
 
     public override string ToString() => Value.ToString();
 
     // Реализация IEquatable
-    public bool Equals(Geid other) => Value == other.Value;
-    public override bool Equals(object obj) => obj is Geid other && Equals(other);
+    public bool Equals(GEID other) => Value == other.Value;
+    public override bool Equals(object obj) => obj is GEID other && Equals(other);
     public override int GetHashCode() => Value;
 
     // Реализация IComparable
-    public int CompareTo(Geid other) => Value.CompareTo(other.Value);
+    public int CompareTo(GEID other) => Value.CompareTo(other.Value);
 
     // Операторы сравнения
-    public static bool operator ==(Geid left, Geid right) => left.Equals(right);
-    public static bool operator !=(Geid left, Geid right) => !left.Equals(right);
-    public static bool operator <(Geid left, Geid right) => left.Value < right.Value;
-    public static bool operator <=(Geid left, Geid right) => left.Value <= right.Value;
-    public static bool operator >(Geid left, Geid right) => left.Value > right.Value;
-    public static bool operator >=(Geid left, Geid right) => left.Value >= right.Value;
+    public static bool operator ==(GEID left, GEID right) => left.Equals(right);
+    public static bool operator !=(GEID left, GEID right) => !left.Equals(right);
+    public static bool operator <(GEID left, GEID right) => left.Value < right.Value;
+    public static bool operator <=(GEID left, GEID right) => left.Value <= right.Value;
+    public static bool operator >(GEID left, GEID right) => left.Value > right.Value;
+    public static bool operator >=(GEID left, GEID right) => left.Value >= right.Value;
 }

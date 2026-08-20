@@ -3,6 +3,7 @@ using System.Collections.Generic;
 public enum EventStatus
 {
     Pending,     // В очереди, ещё не обрабатывалось
+    WaitingForInput, // Ожидает выбора игрока (приостанавливает очередь)
     Cancelled,   // Отменено до применения
     Replaced,    // Заменено другим событием
     Fizzled,     // Не нашло цели и т.п.
@@ -20,22 +21,27 @@ public interface IGameEvent
     /// <summary>
     /// Уникальный ID Event.
     /// </summary>
-    Geid Id { get; }
+    GEID Id { get; }
 
     /// <summary>
     /// Id системы, породившей данный Event. Нужно для отладки, чтобы понять откуда!
     /// </summary>
-    Geid SystemSourceId { get; }
+    GEID SystemSourceId { get; }
+    EventScratch Scratch { get; }
+
 }
 
 public class GameEvent : IGameEvent
 {
     public EventStatus Status { get; set; } = EventStatus.Pending;
-    public Geid Id { get; }
-    public Geid SystemSourceId { get; }
-    public GameEvent(Geid systemSourceId)
+    public GEID Id { get; }
+    public GEID SystemSourceId { get; }
+
+    public EventScratch Scratch { get; }
+
+    public GameEvent(GEID systemSourceId)
     {
-        Id = Geid.New;
+        Id = GEID.New;
         SystemSourceId = systemSourceId;
     }
 }
@@ -52,10 +58,10 @@ public interface IAfterPhaseEvent : IPhaseEvent { }
 public interface ISBAEvent : IPhaseEvent { }
 
 /// <summary>
-/// Роли субъектов в событии. Порядок enum-значений определяет индексы в Subjects.
+/// Роли субъектов в событии с Subjects.
 /// Source = 0, Target = 1, Owner = 2, Auxiliary = 3, PrimaryTarget = 4, SecondaryTarget = 5
 /// </summary>
-public enum SubjectRole
+public enum Role
 {
     Source = 0,
     Target = 1,
@@ -63,16 +69,46 @@ public enum SubjectRole
     Auxiliary = 3,
     PrimaryTarget = 4,
     SecondaryTarget = 5,
+    Spender = 6,
 }
 
 /// <summary>
 /// Интерфейс для событий с участием сущностей.
-/// Subjects — список списков Geid, где индекс соответствует значению SubjectRole:
-///   Subjects[(int)SubjectRole.Source]  — источники
-///   Subjects[(int)SubjectRole.Target]  — цели
+/// Subjects — список списков GEID, где индекс соответствует значению Role:
+///   Subjects[(int)Role.Source]  — источники
+///   Subjects[(int)Role.Target]  — цели
 ///   и т.д.
 /// </summary>
 public interface IHaveSubjects : IGameEvent
 {
-    List<List<Geid>> Subjects { get; set; }
+    System.Collections.Generic.Dictionary<Role, System.Collections.Generic.List<IEntity>> Subjects { get; set; }
+}
+
+// Тот же принцип, что Bindings, но с собственным пространством имён —
+// подчёркивает, что это данные ЭТОГО события, а не карты.
+public sealed class EventScratch
+{
+    private readonly Dictionary<object, object> _data = new();
+
+    public void Set<T>(BindingKey<T> key, T value) => _data[key] = value;
+
+    public bool TryGet<T>(BindingKey<T> key, out T value)
+    {
+        if (_data.TryGetValue(key, out var raw))
+        {
+            value = (T)raw;
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
+    public T GetOrDefault<T>(BindingKey<T> key) =>
+        TryGet(key, out var value) ? value : default;
+}
+
+public static class BuiltinScratchKeys
+{
+    public static readonly BindingKey<int> ShieldAbsorbed = new("ShieldAbsorbed");
+    public static readonly BindingKey<int> ShieldValueBeforeApply = new("ShieldValueBeforeApply");
 }

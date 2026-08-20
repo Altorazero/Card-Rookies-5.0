@@ -7,7 +7,7 @@ using UnityEngine;
 public class PhaseStartLogSystem : IEventListener<IGameEvent, IPhaseEvent>
 {
     public int Priority { get; } = int.MinValue;
-    public Geid SystemId { get; } = Geid.New;
+    public GEID SystemId { get; } = GEID.New;
 
     void IEventListener<IGameEvent, IPhaseEvent>.OnEvent(EventContext context, IGameEvent evt)
     {
@@ -23,7 +23,7 @@ public class PhaseStartLogSystem : IEventListener<IGameEvent, IPhaseEvent>
 public class PhaseEndLogSystem : IEventListener<IGameEvent, IPhaseEvent>
 {
     public int Priority { get; } = int.MaxValue;
-    public Geid SystemId { get; } = Geid.New;
+    public GEID SystemId { get; } = GEID.New;
 
     void IEventListener<IGameEvent, IPhaseEvent>.OnEvent(EventContext context, IGameEvent evt)
     {

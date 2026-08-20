@@ -16,7 +16,7 @@ public sealed class GameStateSnapshot
     /// <summary>
     /// Снимок данных сущностей: entityId → (componentType → cloned component value).
     /// </summary>
-    public IReadOnlyDictionary<Geid, IReadOnlyDictionary<Type, object>> EntitySnapshots { get; }
+    public IReadOnlyDictionary<GEID, IReadOnlyDictionary<Type, object>> EntitySnapshots { get; }
 
     public GameStateSnapshot(BattleState state)
     {
@@ -24,9 +24,9 @@ public sealed class GameStateSnapshot
         EntitySnapshots = TakeSnapshot(state);
     }
 
-    private static IReadOnlyDictionary<Geid, IReadOnlyDictionary<Type, object>> TakeSnapshot(BattleState state)
+    private static IReadOnlyDictionary<GEID, IReadOnlyDictionary<Type, object>> TakeSnapshot(BattleState state)
     {
-        var snapshot = new Dictionary<Geid, IReadOnlyDictionary<Type, object>>();
+        var snapshot = new Dictionary<GEID, IReadOnlyDictionary<Type, object>>();
         foreach (var kvp in state.Entities)
         {
             snapshot[kvp.Key] = TakeEntitySnapshot(kvp.Value);

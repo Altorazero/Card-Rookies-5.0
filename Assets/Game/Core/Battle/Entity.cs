@@ -4,7 +4,7 @@ using System.Reflection;
 
 public interface IEntity
 {
-    Geid Id { get; }
+    GEID Id { get; }
 
     // Получить компонент, если он есть
     T GetComponent<T>() where T : class;
@@ -14,54 +14,40 @@ public interface IEntity
 
     // Только для чтения: все компоненты (для снимков состояния)
     IReadOnlyDictionary<Type, object> Components { get; }
+
+    void AddComponent<T>(T component) where T : class;
+    void RemoveComponent<T>() where T : class;
+
+    public IEntity Empty();
 }
 
-public sealed class BaseEntity : IEntity
+// ===== 2. BaseEntity — упрощаем Clone(), убираем reflection =====
+public class BaseEntity : IEntity
 {
-    public Geid Id { get; }
+    public GEID Id { get; }
     private readonly Dictionary<Type, object> _components = new();
-
     public IReadOnlyDictionary<Type, object> Components => _components;
 
-    public BaseEntity()
-    {
-        Id = Geid.New;
-    }
+    public BaseEntity() => Id = GEID.New;
+    internal BaseEntity(GEID existingId) => Id = existingId;
 
-    internal BaseEntity(Geid existingId)
-    {
-        Id = existingId;
-    }
+    public void AddComponent<T>(T component) where T : class => _components[typeof(T)] = component;
+    public T GetComponent<T>() where T : class => _components.TryGetValue(typeof(T), out var c) ? c as T : null;
+    public bool HasComponent<T>() where T : class => _components.ContainsKey(typeof(T));
+    public void RemoveComponent<T>() where T : class => _components.Remove(typeof(T));
 
-    public void AddComponent<T>(T component) where T : class
-    {
-        _components[typeof(T)] = component;
-    }
-
-    public T GetComponent<T>() where T : class
-    {
-        _components.TryGetValue(typeof(T), out var comp);
-        return comp as T;
-    }
-
-    public bool HasComponent<T>() where T : class
-    {
-        return _components.ContainsKey(typeof(T));
-    }
-
-    /// <summary>
-    /// Создаёт глубокую копию сущности с теми же ID и клонированными компонентами.
-    /// </summary>
+    // Больше никакой рефлексии и MemberwiseClone.
+    // Shallow copy корректен, потому что компоненты неизменяемы.
     public BaseEntity Clone()
     {
         var clone = new BaseEntity(Id);
         foreach (var kvp in _components)
-        {
-            var method = kvp.Value.GetType().GetMethod(
-                "MemberwiseClone",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            clone._components[kvp.Key] = method?.Invoke(kvp.Value, null) ?? kvp.Value;
-        }
+            clone._components[kvp.Key] = kvp.Value;
         return clone;
     }
+
+    public BaseEntity Empty() => new();
+    IEntity IEntity.Empty() => Empty();
 }
+
+
